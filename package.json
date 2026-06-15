@@ -1,0 +1,40 @@
+{
+  "name": "@pinta-ai/pinta-opencode",
+  "version": "0.1.0",
+  "description": "OTLP forwarder + guard for opencode (in-process plugin)",
+  "type": "module",
+  "main": "dist/plugin.js",
+  "exports": {
+    ".": "./dist/plugin.js"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "engines": {
+    "opencode": ">=1.15.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/awarecorp/pinta-opencode.git"
+  },
+  "homepage": "https://github.com/awarecorp/pinta-opencode#readme",
+  "bugs": {
+    "url": "https://github.com/awarecorp/pinta-opencode/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}
