@@ -59,12 +59,14 @@ pinta-opencode는 opencode에 로드되는 단일 플러그인으로:
 
 | 키(옵션 / env) | 의미 | 기본 |
 |---|---|---|
-| `endpoint` / `PINTA_OTLP_ENDPOINT` (또는 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) | OTLP traces 전송 URL | (없으면 텔레메트리 비활성) |
-| `headers` / `OTEL_EXPORTER_OTLP_HEADERS` | `k=v,k=v` 헤더 | — |
-| `guard` / `PINTA_GUARD_ENDPOINT` | guard 정책 서버 URL | (없으면 거버넌스 비활성) |
-| `PINTA_RELAY_TOKEN` | guard·OTLP 인증 → `x-pinta-relay-token` | — |
-| `PINTA_GUARD_TIMEOUT_MS` | guard 타임아웃 | 50 (운영 300 권장) |
-| `PINTA_GUARD_DISABLED=1` | guard 강제 비활성 | — |
+| `endpoint` / `PINTA_OPENCODE_ENDPOINT` (또는 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`) | OTLP traces 전송 URL | (없으면 텔레메트리 비활성) |
+| `headers` / `PINTA_OPENCODE_HEADERS` (또는 `OTEL_EXPORTER_OTLP_HEADERS`) | `k=v,k=v` 헤더 | — |
+| `guard` / `PINTA_OPENCODE_GUARD` | guard 정책 서버 URL | (없으면 거버넌스 비활성) |
+| `token` / `PINTA_OPENCODE_TOKEN` | guard·OTLP 인증 → `x-pinta-relay-token` | — |
+| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | guard 타임아웃 | 50 (운영 300 권장) |
+| `PINTA_OPENCODE_GUARD_DISABLED=1` | guard 강제 비활성 | — |
+
+> 모든 env는 `PINTA_OPENCODE_*` 네임스페이스로 통일 — adapter·manager(enroll)·catalog(manifest) 3개 레포가 동일 키 이름을 공유한다.
 
 - 등록 자체는 env로 불가(config/디렉토리만). 텔레메트리·거버넌스는 독립 — endpoint만 / guard만 / 둘 다 / 둘 없음 모두 유효.
 

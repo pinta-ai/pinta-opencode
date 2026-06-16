@@ -44,21 +44,20 @@ Resolution order: **plugin options (2nd arg) → `process.env` → `~/.config/op
 
 ```env
 # ~/.config/opencode/pinta-opencode.env
-PINTA_OTLP_ENDPOINT=https://your-collector.example.com/v1/traces
-OTEL_EXPORTER_OTLP_HEADERS=x-pinta-relay-token=YOUR-TOKEN
+PINTA_OPENCODE_ENDPOINT=https://your-collector.example.com/v1/traces
+PINTA_OPENCODE_TOKEN=YOUR-TOKEN
 # optional: external guard (allow/deny tool calls)
-PINTA_GUARD_ENDPOINT=https://your-relay.example.com/guard
-PINTA_RELAY_TOKEN=YOUR-TOKEN
+PINTA_OPENCODE_GUARD=https://your-relay.example.com/guard
 ```
 
 | Var (option / env) | Purpose |
 |---|---|
-| `endpoint` / `PINTA_OTLP_ENDPOINT` | Full OTLP/HTTP traces URL. Falls back to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` (+`/v1/traces`). No endpoint → telemetry disabled. |
-| `headers` / `OTEL_EXPORTER_OTLP_HEADERS` | `key=val,key=val` request headers (auth). |
-| `guard` / `PINTA_GUARD_ENDPOINT` | Optional. POST'd on `tool.execute.before`; a `DENY` blocks the tool. No endpoint → governance disabled. |
-| `PINTA_RELAY_TOKEN` | Sent as `x-pinta-relay-token` on guard + OTLP. |
-| `PINTA_GUARD_TIMEOUT_MS` | Guard client timeout (default `50`; `300` recommended in production for cold-start). |
-| `PINTA_GUARD_DISABLED=1` | Force-disable the guard. |
+| `endpoint` / `PINTA_OPENCODE_ENDPOINT` | Full OTLP/HTTP traces URL. Falls back to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` (+`/v1/traces`). No endpoint → telemetry disabled. |
+| `headers` / `PINTA_OPENCODE_HEADERS` | `key=val,key=val` request headers (auth). Falls back to `OTEL_EXPORTER_OTLP_HEADERS`. |
+| `guard` / `PINTA_OPENCODE_GUARD` | Optional. POST'd on `tool.execute.before`; a `DENY` blocks the tool. No endpoint → governance disabled. |
+| `token` / `PINTA_OPENCODE_TOKEN` | Sent as `x-pinta-relay-token` on guard + OTLP. |
+| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | Guard client timeout (default `50`; `300` recommended in production for cold-start). |
+| `PINTA_OPENCODE_GUARD_DISABLED=1` | Force-disable the guard. |
 
 Telemetry and governance are independent — endpoint only, guard only, both, or neither all work.
 

@@ -38,7 +38,7 @@ function parseHeaders(raw: string | Record<string, string> | undefined): Record<
 function resolveEndpoint(options: PintaOptions): string | undefined {
   const full =
     options.endpoint ||
-    process.env.PINTA_OTLP_ENDPOINT ||
+    process.env.PINTA_OPENCODE_ENDPOINT ||
     process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
   if (full) return full.replace(/\/+$/, "");
   const base = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
@@ -53,10 +53,10 @@ function resolveEndpoint(options: PintaOptions): string | undefined {
 export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   loadEnvFile(); // lowest priority — fills only unset process.env keys
 
-  const relayToken = options.token || process.env.PINTA_RELAY_TOKEN || undefined;
+  const relayToken = options.token || process.env.PINTA_OPENCODE_TOKEN || undefined;
 
   const headers = parseHeaders(
-    options.headers ?? process.env.OTEL_EXPORTER_OTLP_HEADERS,
+    options.headers ?? process.env.PINTA_OPENCODE_HEADERS ?? process.env.OTEL_EXPORTER_OTLP_HEADERS,
   );
   // Auto-attach the relay token as a header if one is set and not already present.
   if (relayToken && !Object.keys(headers).some((k) => k.toLowerCase() === "x-pinta-relay-token")) {
@@ -64,15 +64,15 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   }
 
   const guardTimeoutMs =
-    options.guardTimeoutMs ?? (Number(process.env.PINTA_GUARD_TIMEOUT_MS) || 50);
+    options.guardTimeoutMs ?? (Number(process.env.PINTA_OPENCODE_GUARD_TIMEOUT_MS) || 50);
 
   return {
     endpoint: resolveEndpoint(options),
     headers,
-    guardEndpoint: options.guard || process.env.PINTA_GUARD_ENDPOINT || undefined,
+    guardEndpoint: options.guard || process.env.PINTA_OPENCODE_GUARD || undefined,
     relayToken,
     guardTimeoutMs,
-    guardDisabled: process.env.PINTA_GUARD_DISABLED === "1",
+    guardDisabled: process.env.PINTA_OPENCODE_GUARD_DISABLED === "1",
     serviceVersion: process.env.OPENCODE_VERSION || "unknown",
   };
 }
