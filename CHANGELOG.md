@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0
+
+- Unify env var names under the `PINTA_OPENCODE_*` namespace so the adapter,
+  Pinta Manager enroll, and the catalog manifest share identical keys
+  (`PINTA_OPENCODE_ENDPOINT` / `_GUARD` / `_TOKEN` / `_HEADERS` /
+  `_GUARD_TIMEOUT_MS` / `_GUARD_DISABLED`). `OTEL_EXPORTER_OTLP_*` remain as
+  vendor-neutral fallbacks.
+- Downstream wiring (separate repos): aware-backend `opencode` ingest slice,
+  Manager `opencode-plugin` enroll, catalog entry.
+- Repository org moved `awarecorp` → `pinta-ai`.
+
+## 0.1.0
 
 Initial implementation — OTLP forwarder + guard for opencode, as an in-process plugin.
 

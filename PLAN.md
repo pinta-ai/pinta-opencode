@@ -47,7 +47,7 @@
 ### M4 — 릴리스
 - [ ] **T12 e2e on 실 relay** — Manager 환경에서 span 저장/조회 + DENY 사유 노출 확인.
 - [ ] **T13 DESIGNDOC.md** — as-built 결정(pinta-copilot 양식, D1~Dn).
-- [ ] **T14 npm publish** `@pinta-ai/pinta-opencode@0.1.0` + 설치 가이드.
+- [ ] **T14 npm publish** `@pinta-ai/pinta-opencode@0.2.0` + 설치 가이드.
 
 ---
 
