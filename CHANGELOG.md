@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Fix `package-lock.json` so CI `npm ci` resolves (regenerated with a full
+  install to include rollup's cross-platform optional binaries).
+- Add the publish-to-npm GitHub workflow.
+
 ## 0.2.0
 
 - Unify env var names under the `PINTA_OPENCODE_*` namespace so the adapter,
