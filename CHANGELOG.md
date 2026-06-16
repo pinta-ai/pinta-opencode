@@ -13,3 +13,5 @@ Initial implementation — OTLP forwarder + guard for opencode, as an in-process
 - Config resolution: plugin options → `process.env` → `pinta-opencode.env`.
 - Validated end-to-end against opencode 1.15.3 (ALLOW/DENY + OTLP collection).
   See `HYPOTHESIS_VALIDATION.md` §10–13.
+- Robustness (M2): 40 unit/integration tests incl. a real local collector+guard
+  harness covering ALLOW / DENY / fail-open / session.idle flush.
