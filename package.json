@@ -19,11 +19,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/awarecorp/pinta-opencode.git"
+    "url": "git+ssh://git@github.com/pinta-ai/pinta-opencode.git"
   },
-  "homepage": "https://github.com/awarecorp/pinta-opencode#readme",
+  "homepage": "https://github.com/pinta-ai/pinta-opencode#readme",
   "bugs": {
-    "url": "https://github.com/awarecorp/pinta-opencode/issues"
+    "url": "https://github.com/pinta-ai/pinta-opencode/issues"
   },
   "scripts": {
     "build": "tsc",
