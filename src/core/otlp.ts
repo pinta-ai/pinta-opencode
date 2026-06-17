@@ -3,7 +3,7 @@ import os from "os";
 import { redact, truncate } from "./redact.js";
 import type { GuardResult } from "./guard.js";
 
-const SDK_VERSION = "0.2.1"; // keep in sync with package.json
+const SDK_VERSION = "0.3.1"; // keep in sync with package.json
 
 export interface OtlpAttribute {
   key: string;

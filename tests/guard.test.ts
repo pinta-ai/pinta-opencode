@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { evaluateGuard } from "../src/core/guard.js";
+
+// Read straight from package.json so this stays correct across `npm run bump`.
+const PKG_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version as string;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -47,6 +53,6 @@ describe("evaluateGuard", () => {
     const fetchMock = vi.fn().mockResolvedValue({ status: 200, json: async () => ({ decision: "ALLOW", reason: null }) });
     vi.stubGlobal("fetch", fetchMock);
     await evaluateGuard({ spanId: "s" }, "http://x");
-    expect(fetchMock.mock.calls[0][1].headers["user-agent"]).toBe("pinta-opencode/0.3.0");
+    expect(fetchMock.mock.calls[0][1].headers["user-agent"]).toBe(`pinta-opencode/${PKG_VERSION}`);
   });
 });
