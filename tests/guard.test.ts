@@ -42,4 +42,11 @@ describe("evaluateGuard", () => {
     await evaluateGuard({ spanId: "s" }, "http://x", { token: "tok123" });
     expect(fetchMock.mock.calls[0][1].headers["x-pinta-relay-token"]).toBe("tok123");
   });
+
+  it("self-identifies via the User-Agent header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ status: 200, json: async () => ({ decision: "ALLOW", reason: null }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await evaluateGuard({ spanId: "s" }, "http://x");
+    expect(fetchMock.mock.calls[0][1].headers["user-agent"]).toBe("pinta-opencode/0.3.0");
+  });
 });

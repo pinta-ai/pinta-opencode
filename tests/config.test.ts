@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import os from "node:os";
+import path from "node:path";
 import { resolveConfig } from "../src/config.js";
 
 const SAVE = { ...process.env };
@@ -10,6 +12,10 @@ beforeEach(() => {
     "PINTA_OPENCODE_HEADERS", "OTEL_EXPORTER_OTLP_HEADERS", "PINTA_OPENCODE_GUARD", "PINTA_OPENCODE_TOKEN",
     "PINTA_OPENCODE_GUARD_TIMEOUT_MS", "PINTA_OPENCODE_GUARD_DISABLED",
   ]) delete process.env[k];
+  // Keep the suite hermetic: resolveConfig() loads an env file from the opencode
+  // config dir, which on an enrolled dev machine leaks OTEL_* keys into these
+  // tests. Point at a dir with no pinta-opencode.env so loadEnvFile() is a no-op.
+  process.env.OPENCODE_CONFIG_DIR = path.join(os.tmpdir(), "pinta-opencode-test-no-env-file");
 });
 afterEach(() => Object.assign(process.env, SAVE));
 
