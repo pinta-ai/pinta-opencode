@@ -13,19 +13,8 @@
  * `$OPENCODE_CONFIG_DIR` override as the base dir, falling back to
  * `~/.config/opencode` — byte-identical to opencode's previous local logic.
  */
-import {
-  envFilePath as coreEnvFilePath,
-  loadEnvFile as coreLoadEnvFile,
-  parseEnvFile,
-} from "@pinta-ai/core";
-
+import { parseEnvFile } from "@pinta-ai/core";
 export { parseEnvFile };
-
-export function envFilePath(): string {
-  return coreEnvFilePath(".config/opencode", "pinta-opencode.env", "OPENCODE_CONFIG_DIR");
-}
-
+export declare function envFilePath(): string;
 /** Load the env file (if present) and merge only-unset keys into process.env. */
-export function loadEnvFile(filePath: string = envFilePath()): void {
-  coreLoadEnvFile(filePath);
-}
+export declare function loadEnvFile(filePath?: string): void;

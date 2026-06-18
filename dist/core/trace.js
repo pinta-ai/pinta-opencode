@@ -7,3 +7,4 @@
 // FIFO cap at 200). Instantiated no-arg (`new TraceManager()`), and the
 // optional `{ maxSessions? }` constructor arg is compatible with that.
 export { MemorySessionTraceManager as TraceManager } from "@pinta-ai/core";
+//# sourceMappingURL=trace.js.map

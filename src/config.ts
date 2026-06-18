@@ -1,3 +1,4 @@
+import { parseHeadersEnv } from "@pinta-ai/core";
 import { loadEnvFile } from "./env-file.js";
 
 /** Options object passed via `opencode.json` → `plugin:[["@pinta-ai/pinta-opencode", {…}]]`. */
@@ -24,17 +25,6 @@ export interface ResolvedConfig {
   serviceVersion: string;
 }
 
-function parseHeaders(raw: string | Record<string, string> | undefined): Record<string, string> {
-  if (!raw) return {};
-  if (typeof raw === "object") return { ...raw };
-  const out: Record<string, string> = {};
-  for (const pair of raw.split(",")) {
-    const [k, ...rest] = pair.split("=");
-    if (k && rest.length > 0) out[k.trim()] = rest.join("=").trim();
-  }
-  return out;
-}
-
 function resolveEndpoint(options: PintaOptions): string | undefined {
   const full =
     options.endpoint ||
@@ -55,7 +45,7 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
 
   const relayToken = options.token || process.env.PINTA_OPENCODE_TOKEN || undefined;
 
-  const headers = parseHeaders(
+  const headers = parseHeadersEnv(
     options.headers ?? process.env.PINTA_OPENCODE_HEADERS ?? process.env.OTEL_EXPORTER_OTLP_HEADERS,
   );
   // Auto-attach the relay token as a header if one is set and not already present.
