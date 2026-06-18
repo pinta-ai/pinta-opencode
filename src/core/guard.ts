@@ -1,20 +1,12 @@
-export interface GuardInput {
-  spanId: string;
-  toolName?: string;
-  toolInput?: unknown;
-  rawTextFields?: Record<string, string>;
-}
+// opencode-specific binding over the shared guard in @pinta-ai/core. Preserves
+// the historical opencode behavior: 50ms default timeout, a `pinta-opencode/
+// <version>` User-Agent, and options passed explicitly (not read from
+// process.env) because the plugin is a long-lived in-process module whose config
+// is resolved at init, after this module is already imported.
+import { evaluateGuard as coreEvaluateGuard } from "@pinta-ai/core";
+import type { GuardInput, GuardResult } from "@pinta-ai/core";
 
-export interface GuardResult {
-  decision: "ALLOW" | "DENY" | "REVIEW";
-  reason: string | null;
-  // Pre-formatted message the manager wants surfaced to the LLM/user when
-  // decision === 'DENY'. Null otherwise, or when talking to an older manager
-  // that doesn't yet emit this field.
-  userMessage: string | null;
-  durationMs: number;
-  failOpenReason?: "timeout" | "refused" | "error";
-}
+export type { GuardInput, GuardResult } from "@pinta-ai/core";
 
 export interface GuardOptions {
   /** Hard timeout. 50ms default keeps the hook snappy; 300ms recommended in prod. */
@@ -25,67 +17,28 @@ export interface GuardOptions {
   disabled?: boolean;
 }
 
+const DEFAULT_TIMEOUT_MS = 50;
+
 // Self-identify to the manager's guard route so it can attribute calls to this
 // adaptor (the route parses `pinta-*/<version>` out of the User-Agent). Keep the
 // version in sync with package.json.
 const GUARD_UA = "pinta-opencode/0.3.1";
 
-function sleep(ms: number): Promise<never> {
-  return new Promise((_, reject) =>
-    setTimeout(() => {
-      const err = new Error("Guard request timed out");
-      err.name = "TimeoutError";
-      reject(err);
-    }, ms),
-  );
-}
-
 /**
  * Query the external guard policy server. Fail-open on every error path
  * (no endpoint / disabled / non-200 / timeout / throw → ALLOW). Options are
  * passed explicitly (not read from process.env) because the opencode plugin
- * is a long-lived in-process module whose config is resolved at init, after
- * this module is already imported.
+ * is a long-lived in-process module whose config is resolved at init.
  */
-export async function evaluateGuard(
+export function evaluateGuard(
   input: GuardInput,
   endpoint: string | undefined,
   opts: GuardOptions = {},
 ): Promise<GuardResult | null> {
-  if (!endpoint) return null;
-  if (opts.disabled) return null;
-  const timeoutMs = opts.timeoutMs ?? 50;
-  const start = Date.now();
-  try {
-    const res = await Promise.race([
-      fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": GUARD_UA,
-          "x-pinta-relay-token": opts.token ?? "",
-        },
-        body: JSON.stringify({ input }),
-      }),
-      sleep(timeoutMs),
-    ]);
-    if (res.status !== 200) {
-      return { decision: "ALLOW", reason: null, userMessage: null, durationMs: Date.now() - start, failOpenReason: "error" };
-    }
-    const body = (await res.json()) as {
-      decision: GuardResult["decision"];
-      reason: string | null;
-      userMessage?: string | null;
-      durationMs?: number;
-    };
-    return {
-      decision: body.decision,
-      reason: body.reason,
-      userMessage: body.userMessage ?? null,
-      durationMs: body.durationMs ?? Date.now() - start,
-    };
-  } catch (err) {
-    const reason: GuardResult["failOpenReason"] = (err as Error).name === "TimeoutError" ? "timeout" : "error";
-    return { decision: "ALLOW", reason: null, userMessage: null, durationMs: Date.now() - start, failOpenReason: reason };
-  }
+  return coreEvaluateGuard(input, endpoint, {
+    timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    token: opts.token,
+    disabled: opts.disabled,
+    userAgent: GUARD_UA,
+  });
 }

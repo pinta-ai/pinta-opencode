@@ -1,21 +1,9 @@
-import crypto from "crypto";
-
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-function generateUlid(): string {
-  const now = Date.now();
-  let ts = "";
-  let t = now;
-  for (let i = 0; i < 10; i++) {
-    ts = CROCKFORD[t & 31] + ts;
-    t = Math.floor(t / 32);
-  }
-  const rand = crypto.randomBytes(10);
-  let r = "";
-  for (let i = 0; i < 10; i++) r += CROCKFORD[rand[i] & 31];
-  while (r.length < 16) r += CROCKFORD[0];
-  return ts + r;
-}
+// opencode-specific trace correlation. Unlike the short-lived hook adapters
+// (whose TraceManager persists one trace id to disk), opencode is a long-lived
+// in-process plugin, so traces live in an in-memory map keyed by sessionID for
+// the instance lifetime — no file persistence. Only the ULID generator is
+// shared with @pinta-ai/core (it produces identical 26-char Crockford ULIDs).
+import { generateUlid } from "@pinta-ai/core";
 
 const MAX_SESSIONS = 200;
 
