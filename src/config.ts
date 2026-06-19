@@ -25,11 +25,17 @@ export interface ResolvedConfig {
   serviceVersion: string;
 }
 
+/** First non-empty value (option → env precedence), else undefined. */
+function firstSet(...vals: (string | undefined)[]): string | undefined {
+  return vals.find((v) => v) || undefined;
+}
+
 function resolveEndpoint(options: PintaOptions): string | undefined {
-  const full =
-    options.endpoint ||
-    process.env.PINTA_OPENCODE_ENDPOINT ||
-    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+  const full = firstSet(
+    options.endpoint,
+    process.env.PINTA_OPENCODE_ENDPOINT,
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+  );
   if (full) return full.replace(/\/+$/, "");
   const base = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (base) return base.replace(/\/+$/, "") + "/v1/traces";
@@ -43,7 +49,7 @@ function resolveEndpoint(options: PintaOptions): string | undefined {
 export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   loadEnvFile(); // lowest priority — fills only unset process.env keys
 
-  const relayToken = options.token || process.env.PINTA_OPENCODE_TOKEN || undefined;
+  const relayToken = firstSet(options.token, process.env.PINTA_OPENCODE_TOKEN);
 
   const headers = parseHeadersEnv(
     options.headers ?? process.env.PINTA_OPENCODE_HEADERS ?? process.env.OTEL_EXPORTER_OTLP_HEADERS,
@@ -59,7 +65,7 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   return {
     endpoint: resolveEndpoint(options),
     headers,
-    guardEndpoint: options.guard || process.env.PINTA_OPENCODE_GUARD || undefined,
+    guardEndpoint: firstSet(options.guard, process.env.PINTA_OPENCODE_GUARD),
     relayToken,
     guardTimeoutMs,
     guardDisabled: process.env.PINTA_OPENCODE_GUARD_DISABLED === "1",

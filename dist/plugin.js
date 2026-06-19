@@ -7,6 +7,20 @@ function warn(scope, err) {
     process.stderr.write(`[pinta-opencode] ${scope}: ${err?.message ?? String(err)}\n`);
 }
 /**
+ * Wrap a hook body so every telemetry/guard error is swallowed (logged, not
+ * rethrown) — the fail-open invariant. Returns a hook with the same signature.
+ */
+function failOpen(scope, fn) {
+    return async (...args) => {
+        try {
+            await fn(...args);
+        }
+        catch (err) {
+            warn(scope, err);
+        }
+    };
+}
+/**
  * pinta-opencode plugin entry. opencode invokes this once per instance with
  * `(input, options)` and keeps the returned hooks for the instance lifetime
  * (verified H-C1), so config + transport + trace state live in this closure.
@@ -23,54 +37,44 @@ export const PintaOpencode = async (_input, options) => {
     const transport = new Transport({ endpoint: config.endpoint, headers: config.headers });
     const trace = new TraceManager();
     const telemetry = new Telemetry(transport, trace, config);
+    // Guard query + before-span emission, both fail-open. Returns the guard
+    // decision (or null on any infra error) so the caller can throw on DENY.
+    async function guardAndTrace(input, args) {
+        let guard = null;
+        try {
+            guard = await evaluateGuard({
+                spanId: input.sessionID,
+                toolName: input.tool,
+                toolInput: args,
+                rawTextFields: { toolInput: safeStringify(args) },
+            }, config.guardEndpoint, { timeoutMs: config.guardTimeoutMs, token: config.relayToken, disabled: config.guardDisabled });
+            await telemetry.toolBefore(input, args, guard);
+        }
+        catch (err) {
+            warn("tool.execute.before", err); // telemetry/guard infra errors are fail-open
+        }
+        return guard;
+    }
     return {
         // turn-START → rotate a new trace for this session.
-        "chat.message": async (input) => {
-            try {
-                trace.newTrace(input?.sessionID);
-            }
-            catch (err) {
-                warn("chat.message", err);
-            }
-        },
+        "chat.message": failOpen("chat.message", async (input) => {
+            trace.newTrace(input?.sessionID);
+        }),
         // lifecycle telemetry; flushes the retry buffer on session.idle (turn-END).
-        event: async (input) => {
-            try {
-                if (input?.event)
-                    await telemetry.lifecycle(input.event);
-            }
-            catch (err) {
-                warn("event", err);
-            }
-        },
+        event: failOpen("event", async (input) => {
+            if (input?.event)
+                await telemetry.lifecycle(input.event);
+        }),
         // ★ governance gate: guard query → DENY throws (blocks just this tool).
+        // Telemetry/guard-infra errors are fail-open; only a DENY decision escapes.
         "tool.execute.before": async (input, output) => {
-            let guard = null;
-            try {
-                guard = await evaluateGuard({
-                    spanId: input.sessionID,
-                    toolName: input.tool,
-                    toolInput: output?.args,
-                    rawTextFields: { toolInput: safeStringify(output?.args) },
-                }, config.guardEndpoint, { timeoutMs: config.guardTimeoutMs, token: config.relayToken, disabled: config.guardDisabled });
-                await telemetry.toolBefore(input, output?.args, guard);
-            }
-            catch (err) {
-                warn("tool.execute.before", err); // telemetry/guard infra errors are fail-open
-            }
+            const guard = await guardAndTrace(input, output?.args);
             if (guard?.decision === "DENY") {
                 throw new Error(guard.userMessage ?? guard.reason ?? "guard_deny");
             }
         },
         // tool-result telemetry.
-        "tool.execute.after": async (input, output) => {
-            try {
-                await telemetry.toolAfter(input, output);
-            }
-            catch (err) {
-                warn("tool.execute.after", err);
-            }
-        },
+        "tool.execute.after": failOpen("tool.execute.after", (input, output) => telemetry.toolAfter(input, output)),
     };
 };
 function safeStringify(v) {

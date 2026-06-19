@@ -1,11 +1,28 @@
 import { resolveConfig, type PintaOptions } from "./config.js";
 import { Transport } from "./core/transport.js";
 import { TraceManager } from "./core/trace.js";
-import { evaluateGuard } from "./core/guard.js";
+import { evaluateGuard, type GuardResult } from "./core/guard.js";
 import { Telemetry, type OpencodeEvent, type ToolBeforeInput, type ToolAfterOutput } from "./telemetry.js";
 
 function warn(scope: string, err: unknown): void {
   process.stderr.write(`[pinta-opencode] ${scope}: ${(err as Error)?.message ?? String(err)}\n`);
+}
+
+/**
+ * Wrap a hook body so every telemetry/guard error is swallowed (logged, not
+ * rethrown) — the fail-open invariant. Returns a hook with the same signature.
+ */
+function failOpen<A extends unknown[]>(
+  scope: string,
+  fn: (...args: A) => Promise<void>,
+): (...args: A) => Promise<void> {
+  return async (...args: A) => {
+    try {
+      await fn(...args);
+    } catch (err) {
+      warn(scope, err);
+    }
+  };
 }
 
 /**
@@ -26,56 +43,52 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
   const trace = new TraceManager();
   const telemetry = new Telemetry(transport, trace, config);
 
+  // Guard query + before-span emission, both fail-open. Returns the guard
+  // decision (or null on any infra error) so the caller can throw on DENY.
+  async function guardAndTrace(input: ToolBeforeInput, args: unknown): Promise<GuardResult | null> {
+    let guard: GuardResult | null = null;
+    try {
+      guard = await evaluateGuard(
+        {
+          spanId: input.sessionID,
+          toolName: input.tool,
+          toolInput: args,
+          rawTextFields: { toolInput: safeStringify(args) },
+        },
+        config.guardEndpoint,
+        { timeoutMs: config.guardTimeoutMs, token: config.relayToken, disabled: config.guardDisabled },
+      );
+      await telemetry.toolBefore(input, args, guard);
+    } catch (err) {
+      warn("tool.execute.before", err); // telemetry/guard infra errors are fail-open
+    }
+    return guard;
+  }
+
   return {
     // turn-START → rotate a new trace for this session.
-    "chat.message": async (input: { sessionID?: string }) => {
-      try {
-        trace.newTrace(input?.sessionID);
-      } catch (err) {
-        warn("chat.message", err);
-      }
-    },
+    "chat.message": failOpen("chat.message", async (input: { sessionID?: string }) => {
+      trace.newTrace(input?.sessionID);
+    }),
 
     // lifecycle telemetry; flushes the retry buffer on session.idle (turn-END).
-    event: async (input: { event?: OpencodeEvent }) => {
-      try {
-        if (input?.event) await telemetry.lifecycle(input.event);
-      } catch (err) {
-        warn("event", err);
-      }
-    },
+    event: failOpen("event", async (input: { event?: OpencodeEvent }) => {
+      if (input?.event) await telemetry.lifecycle(input.event);
+    }),
 
     // ★ governance gate: guard query → DENY throws (blocks just this tool).
+    // Telemetry/guard-infra errors are fail-open; only a DENY decision escapes.
     "tool.execute.before": async (input: ToolBeforeInput, output: { args: unknown }) => {
-      let guard = null;
-      try {
-        guard = await evaluateGuard(
-          {
-            spanId: input.sessionID,
-            toolName: input.tool,
-            toolInput: output?.args,
-            rawTextFields: { toolInput: safeStringify(output?.args) },
-          },
-          config.guardEndpoint,
-          { timeoutMs: config.guardTimeoutMs, token: config.relayToken, disabled: config.guardDisabled },
-        );
-        await telemetry.toolBefore(input, output?.args, guard);
-      } catch (err) {
-        warn("tool.execute.before", err); // telemetry/guard infra errors are fail-open
-      }
+      const guard = await guardAndTrace(input, output?.args);
       if (guard?.decision === "DENY") {
         throw new Error(guard.userMessage ?? guard.reason ?? "guard_deny");
       }
     },
 
     // tool-result telemetry.
-    "tool.execute.after": async (input: ToolBeforeInput, output: ToolAfterOutput) => {
-      try {
-        await telemetry.toolAfter(input, output);
-      } catch (err) {
-        warn("tool.execute.after", err);
-      }
-    },
+    "tool.execute.after": failOpen("tool.execute.after", (input: ToolBeforeInput, output: ToolAfterOutput) =>
+      telemetry.toolAfter(input, output),
+    ),
   };
 };
 

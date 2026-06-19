@@ -58,7 +58,7 @@ export class Telemetry {
     await this.emit(
       "opencode.tool.before",
       input.sessionID,
-      { kind: "tool.before", tool: input.tool, session_id: input.sessionID, call_id: input.callID, args },
+      { ...toolIdentity("tool.before", input), args },
       guard,
     );
   }
@@ -67,14 +67,16 @@ export class Telemetry {
   async toolAfter(input: ToolBeforeInput, output: ToolAfterOutput): Promise<void> {
     const meta = output.metadata ?? {};
     await this.emit("opencode.tool.after", input.sessionID, {
-      kind: "tool.after",
-      tool: input.tool,
-      session_id: input.sessionID,
-      call_id: input.callID,
+      ...toolIdentity("tool.after", input),
       title: output.title,
       output: output.output,
       exit: meta.exit,
       truncated: meta.truncated,
     });
   }
+}
+
+/** Shared identity fields for both tool spans (kind + tool/session/call ids). */
+function toolIdentity(kind: string, input: ToolBeforeInput): Record<string, unknown> {
+  return { kind, tool: input.tool, session_id: input.sessionID, call_id: input.callID };
 }

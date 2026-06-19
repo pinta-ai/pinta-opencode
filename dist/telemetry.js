@@ -33,21 +33,22 @@ export class Telemetry {
     }
     /** Tool span from `tool.execute.before`, carrying the guard decision. */
     async toolBefore(input, args, guard) {
-        await this.emit("opencode.tool.before", input.sessionID, { kind: "tool.before", tool: input.tool, session_id: input.sessionID, call_id: input.callID, args }, guard);
+        await this.emit("opencode.tool.before", input.sessionID, { ...toolIdentity("tool.before", input), args }, guard);
     }
     /** Tool result span from `tool.execute.after`, incl. exit code / truncation. */
     async toolAfter(input, output) {
         const meta = output.metadata ?? {};
         await this.emit("opencode.tool.after", input.sessionID, {
-            kind: "tool.after",
-            tool: input.tool,
-            session_id: input.sessionID,
-            call_id: input.callID,
+            ...toolIdentity("tool.after", input),
             title: output.title,
             output: output.output,
             exit: meta.exit,
             truncated: meta.truncated,
         });
     }
+}
+/** Shared identity fields for both tool spans (kind + tool/session/call ids). */
+function toolIdentity(kind, input) {
+    return { kind, tool: input.tool, session_id: input.sessionID, call_id: input.callID };
 }
 //# sourceMappingURL=telemetry.js.map
