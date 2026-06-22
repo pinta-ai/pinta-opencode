@@ -27,18 +27,21 @@
   },
   "scripts": {
     "bump": "node scripts/bump.mjs",
-    "build": "tsc",
+    "build": "tsc --noEmit && esbuild src/plugin.ts --bundle --platform=node --format=esm --target=node18 --minify --outfile=dist/plugin.js --banner:js=\"import { createRequire as __pintaCreateRequire } from 'module'; const require = __pintaCreateRequire(import.meta.url);\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": {
-    "@pinta-ai/core": "file:../pinta-core"
-  },
   "devDependencies": {
+    "@pinta-ai/core": "^0.2.0",
     "@types/node": "^22.0.0",
+    "esbuild": "0.24.2",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   }
 }
