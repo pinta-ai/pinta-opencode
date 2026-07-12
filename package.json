@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/plugin.js",
   "exports": {
-    ".": "./dist/plugin.js"
+    ".": "./dist/plugin.js",
+    "./lifecycle": "./dist/index.mjs"
   },
   "license": "PolyForm-Noncommercial-1.0.0",
   "engines": {
@@ -27,10 +28,11 @@
   },
   "scripts": {
     "bump": "node scripts/bump.mjs",
-    "build": "tsc --noEmit && esbuild src/plugin.ts --bundle --platform=node --format=esm --target=node18 --minify --outfile=dist/plugin.js --banner:js=\"import { createRequire as __pintaCreateRequire } from 'module'; const require = __pintaCreateRequire(import.meta.url);\"",
+    "build": "tsc --noEmit && esbuild src/plugin.ts --bundle --platform=node --format=esm --target=node18 --minify --outfile=dist/plugin.js --banner:js=\"import { createRequire as __pintaCreateRequire } from 'module'; const require = __pintaCreateRequire(import.meta.url);\" && esbuild src/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/index.mjs --banner:js=\"import { createRequire as __pintaCreateRequire } from 'module'; const require = __pintaCreateRequire(import.meta.url);\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
