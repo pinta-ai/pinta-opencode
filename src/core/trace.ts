@@ -1,52 +1,9 @@
-import crypto from "crypto";
-
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-function generateUlid(): string {
-  const now = Date.now();
-  let ts = "";
-  let t = now;
-  for (let i = 0; i < 10; i++) {
-    ts = CROCKFORD[t & 31] + ts;
-    t = Math.floor(t / 32);
-  }
-  const rand = crypto.randomBytes(10);
-  let r = "";
-  for (let i = 0; i < 10; i++) r += CROCKFORD[rand[i] & 31];
-  while (r.length < 16) r += CROCKFORD[0];
-  return ts + r;
-}
-
-const MAX_SESSIONS = 200;
-
-/**
- * Per-turn trace correlation, keyed by `sessionID`.
- *
- * opencode instantiates the plugin once per instance (verified H-C1), so the
- * map lives in memory for the instance lifetime — no file persistence needed.
- * `chat.message` (turn-START) rotates a new ULID trace for its session; every
- * subsequent hook in the turn reuses it. Keyed by sessionID so concurrent
- * sessions don't collide.
- */
-export class TraceManager {
-  private map = new Map<string, string>();
-
-  /** Start a new trace for this session (called on chat.message / turn-START). */
-  newTrace(sessionId?: string): string {
-    const key = sessionId || "default";
-    const traceId = generateUlid();
-    this.map.set(key, traceId);
-    // Cap to avoid unbounded growth over a long-lived instance.
-    if (this.map.size > MAX_SESSIONS) {
-      const oldest = this.map.keys().next().value;
-      if (oldest !== undefined) this.map.delete(oldest);
-    }
-    return traceId;
-  }
-
-  /** Current trace for this session; create one if none exists yet. */
-  currentTrace(sessionId?: string): string {
-    const key = sessionId || "default";
-    return this.map.get(key) ?? this.newTrace(key);
-  }
-}
+// opencode-specific trace correlation. Unlike the short-lived hook adapters
+// (whose TraceManager persists one trace id to disk), opencode is a long-lived
+// in-process plugin, so traces live in an in-memory map keyed by sessionID for
+// the instance lifetime — no file persistence. This is now the shared
+// MemorySessionTraceManager from @pinta-ai/core, which matches opencode's
+// requirements exactly (Map keyed by sessionID, default "default" key,
+// FIFO cap at 200). Instantiated no-arg (`new TraceManager()`), and the
+// optional `{ maxSessions? }` constructor arg is compatible with that.
+export { MemorySessionTraceManager as TraceManager } from "@pinta-ai/core";
