@@ -22,7 +22,7 @@ const DEFAULT_TIMEOUT_MS = 50;
 // Self-identify to the manager's guard route so it can attribute calls to this
 // adaptor (the route parses `pinta-*/<version>` out of the User-Agent). Keep the
 // version in sync with package.json.
-const GUARD_UA = "pinta-opencode/0.3.1";
+const GUARD_UA = "pinta-opencode/0.4.0";
 
 /**
  * Query the external guard policy server. Fail-open on every error path
