@@ -19,6 +19,23 @@ import {
 export { mergeBatch, ulidToTraceId };
 export type { OtlpAttribute, OtlpPayload };
 
+// os.userInfo() throws on hosts with no passwd entry for the uid (containers,
+// CI, service accounts). Memoize a safe fallback so span building never throws.
+let cachedProcessOwner: string | undefined;
+function processOwner(): string {
+  if (cachedProcessOwner === undefined) {
+    try {
+      cachedProcessOwner = os.userInfo().username;
+    } catch {
+      cachedProcessOwner =
+        process.env.USER ??
+        process.env.LOGNAME ??
+        (typeof process.getuid === "function" ? String(process.getuid()) : "unknown");
+    }
+  }
+  return cachedProcessOwner;
+}
+
 const SDK_VERSION = "0.5.0"; // keep in sync with package.json
 
 /** Identifier/enum keys for which redaction is skipped (truncation still applies). */
@@ -64,7 +81,7 @@ function resourceAttrs(serviceVersion: string): OtlpAttribute[] {
     { key: "telemetry.sdk.language", value: { stringValue: "nodejs" } },
     { key: "telemetry.sdk.version", value: { stringValue: SDK_VERSION } },
     { key: "process.pid", value: { intValue: process.pid } },
-    { key: "process.owner", value: { stringValue: os.userInfo().username } },
+    { key: "process.owner", value: { stringValue: processOwner() } },
     { key: "host.name", value: { stringValue: os.hostname() } },
     { key: "host.arch", value: { stringValue: os.arch() } },
   ];
