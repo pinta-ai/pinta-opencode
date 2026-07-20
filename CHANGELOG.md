@@ -2,7 +2,7 @@
 
 ## 0.5.1
 
-- Bump `@pinta-ai/core` `^0.3.0` → `^0.4.1` (devDependency, bundled
+- Bump `@pinta-ai/core` `^0.3.0` → `^0.5.0` (devDependency, bundled
   into `dist/` at build). Pulls in the oversized-flush fix (pinta-manager#180
   follow-up): the in-memory retry buffer now flushes in 900 KiB chunks instead
   of one unbounded POST, spans are capped at 800 KiB at build time, and a
