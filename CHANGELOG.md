@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1
+
+- Bump `@pinta-ai/core` `^0.3.0` → `^0.4.1` (devDependency, bundled
+  into `dist/` at build). Pulls in the oversized-flush fix (pinta-manager#180
+  follow-up): the in-memory retry buffer now flushes in 900 KiB chunks instead
+  of one unbounded POST, spans are capped at 800 KiB at build time, and a
+  payload that alone exceeds the POST budget is dropped with a diagnostic
+  instead of poisoning every later flush. No adapter source change was needed.
+
 ## 0.4.0
 
 - Consolidate the duplicated low-level utilities (`guard`, `otlp`, `redact`,
