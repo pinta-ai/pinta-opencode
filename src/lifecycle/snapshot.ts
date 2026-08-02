@@ -34,7 +34,7 @@
  *    coherent if later reopened by SQLite.
  */
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -58,6 +58,15 @@ export interface SnapshotOptions {
   stableMs?: number;
   /** max fallback copy attempts when the file keeps moving. Default 3. */
   maxRetries?: number;
+  /**
+   * Overall wall-clock cap (ms) for the quiesce-copy fallback. The mtime-
+   * stability wait can otherwise spin forever when the source is written on a
+   * cadence shorter than `stableMs` (opencode flushes `opencode.db` ~every 2s),
+   * hanging `snapshot()` and stalling the sidecar scan pipeline. On exceed we
+   * take a best-effort copy of the current bytes instead of waiting further.
+   * Default: `max(stableMs * maxRetries * 3, 15000)`.
+   */
+  deadlineMs?: number;
 }
 
 const DEFAULT_STABLE_MS = 2000;
@@ -71,7 +80,16 @@ export function detectSqlite3(): Promise<string | null> {
   if (sqlite3Probe === undefined) {
     sqlite3Probe = execFileAsync("sqlite3", ["-version"])
       .then(() => "sqlite3" as const)
-      .catch(() => null);
+      .catch(() => null)
+      .then((result) => {
+        // Cache a positive result permanently (the binary won't vanish), but
+        // don't permanently memoize a *negative* one: a missing or transiently
+        // failing `sqlite3` (PATH not yet populated, EAGAIN under load) may
+        // succeed on a later scan. Drop the cache so the next call re-probes.
+        // Concurrent callers still share the single in-flight probe above.
+        if (result === null) sqlite3Probe = undefined;
+        return result;
+      });
   }
   return sqlite3Probe;
 }
@@ -114,20 +132,28 @@ async function quiesceCopy(
   outDir: string,
   stableMs: number,
   maxRetries: number,
+  deadlineMs: number,
 ): Promise<string> {
   const dbPath = file.absPath;
   const outDbPath = path.join(outDir, path.basename(dbPath));
+  // Absolute wall-clock cap so the stability wait can never spin forever when
+  // the source is written faster than `stableMs` (opencode's ~2s flush cadence).
+  const deadline = Date.now() + deadlineMs;
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // 1) Wait for the source mtime to hold steady for `stableMs`.
+      // 1) Wait for the source mtime to hold steady for `stableMs`, but never
+      //    past the overall deadline.
       let before = await stat(dbPath);
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
+      let stable = false;
+      while (Date.now() < deadline) {
         await sleep(stableMs);
         const now = await stat(dbPath);
-        if (now.mtimeMs === before.mtimeMs && now.size === before.size) break;
+        if (now.mtimeMs === before.mtimeMs && now.size === before.size) {
+          stable = true;
+          break;
+        }
         before = now;
       }
 
@@ -135,6 +161,11 @@ async function quiesceCopy(
       await copyFile(dbPath, outDbPath);
       await copyIfPresent(`${dbPath}-wal`, `${outDbPath}-wal`);
       await copyIfPresent(`${dbPath}-shm`, `${outDbPath}-shm`);
+
+      // If the deadline elapsed before the source ever quiesced, return this
+      // best-effort copy now (the contract permits a slightly-torn copy over an
+      // unbounded hang) rather than looping to retry a wait that can't win.
+      if (!stable) return outDbPath;
 
       // 3) Re-stat the source: if it moved during the copy, retry.
       const after = await stat(dbPath);
@@ -145,6 +176,8 @@ async function quiesceCopy(
     } catch (err) {
       lastErr = err;
     }
+    // Stop retrying once the overall deadline has passed.
+    if (Date.now() >= deadline) break;
   }
 
   // Exhausted retries. If we managed to write *something*, return it
@@ -173,22 +206,30 @@ export async function snapshot(file: TranscriptFile, opts: SnapshotOptions = {})
   const base = opts.tmpDir ?? tmpdir();
   const stableMs = opts.stableMs ?? DEFAULT_STABLE_MS;
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const deadlineMs = opts.deadlineMs ?? Math.max(stableMs * maxRetries * 3, 15_000);
 
   const sqlite3Path =
     opts.sqlite3Path === undefined ? await detectSqlite3() : opts.sqlite3Path;
 
   const outDir = await makeSnapshotDir(base);
 
-  if (sqlite3Path) {
-    const outPath = path.join(outDir, `${path.basename(file.absPath)}.snapshot`);
-    try {
-      await backupViaCli(sqlite3Path, file.absPath, outPath);
-      return outPath;
-    } catch {
-      // CLI backup failed (locked out, odd build) — fall through to the
-      // quiesce-copy fallback rather than dropping the file entirely.
+  try {
+    if (sqlite3Path) {
+      const outPath = path.join(outDir, `${path.basename(file.absPath)}.snapshot`);
+      try {
+        await backupViaCli(sqlite3Path, file.absPath, outPath);
+        return outPath;
+      } catch {
+        // CLI backup failed (locked out, odd build) — fall through to the
+        // quiesce-copy fallback rather than dropping the file entirely.
+      }
     }
-  }
 
-  return quiesceCopy(file, outDir, stableMs, maxRetries);
+    return await quiesceCopy(file, outDir, stableMs, maxRetries, deadlineMs);
+  } catch (err) {
+    // On failure the caller never receives the path and so can't clean it up —
+    // remove the temp dir we own here. (On success the caller owns `outDir`.)
+    await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
 }
