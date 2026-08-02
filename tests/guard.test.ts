@@ -36,7 +36,21 @@ describe("evaluateGuard", () => {
   });
 
   it("fail-opens to ALLOW on timeout", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {}))); // never resolves
+    // core >=0.5.0 aborts the fetch via AbortController on timeout, so the
+    // mock must reject on signal abort — a never-settling promise would hang.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: unknown, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              const err = new Error("aborted");
+              err.name = "AbortError";
+              reject(err);
+            });
+          }),
+      ),
+    );
     const r = await evaluateGuard({ spanId: "s" }, "http://x", { timeoutMs: 10 });
     expect(r?.decision).toBe("ALLOW");
     expect(r?.failOpenReason).toBe("timeout");
