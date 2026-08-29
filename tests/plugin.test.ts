@@ -48,3 +48,37 @@ describe("plugin", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+/**
+ * What the guard is told about the invocation.
+ *
+ * `method` names the opencode hook, and it is deliberately not a Claude Code
+ * hook name: the manager only trusts a tool name when it can see a CC hook
+ * behind it, so naming the real event stops an opencode tool called `read`
+ * from being taken for Claude Code's and having its arguments read as content
+ * rather than as a command (PTA-207).
+ *
+ * `cwd` is this process's directory — for an in-process plugin, opencode's
+ * own, the directory its relative tool paths resolve against. Without it
+ * `rm -rf passwd` reads as routine work no matter where it erases from
+ * (PTA-176).
+ */
+describe("plugin — what the guard is told about the invocation", () => {
+  it("puts the event and the working directory on the wire", async () => {
+    const fetchMock = okFetch({ decision: "ALLOW", reason: null });
+    vi.stubGlobal("fetch", fetchMock);
+    const hooks = await PintaOpencode({}, { guard: "http://guard" });
+    await hooks["tool.execute.before"](
+      { tool: "bash", sessionID: "s", callID: "c" },
+      { args: { command: "rm -rf passwd" } },
+    );
+    const guardCall = fetchMock.mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes("guard"),
+    );
+    const sent = JSON.parse(String((guardCall?.[1] as { body?: string })?.body));
+    expect(sent.input).toMatchObject({
+      method: "tool.execute.before",
+      cwd: process.cwd(),
+    });
+  });
+});
