@@ -48,10 +48,23 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
   async function guardAndTrace(input: ToolBeforeInput, args: unknown): Promise<GuardResult | null> {
     let guard: GuardResult | null = null;
     try {
+      // `method` is the opencode hook this arrived on. It is deliberately not a
+      // Claude Code hook name, and that is the useful part: the manager only
+      // trusts a tool name when it can see a CC hook behind it, so naming the
+      // real event stops an opencode tool called `read` from being taken for
+      // Claude Code's and having its arguments read as content (PTA-207).
+      //
+      // `cwd` is this process's directory, which for an in-process plugin is
+      // opencode's own — the directory its relative tool paths resolve against.
+      // The manager resolves targets the same way before judging them, so
+      // `rm -rf passwd` is no longer read as routine work regardless of where
+      // it erases from (PTA-176).
       guard = await evaluateGuard(
         {
           spanId: input.sessionID,
           toolName: input.tool,
+          method: "tool.execute.before",
+          cwd: process.cwd(),
           toolInput: args,
           rawTextFields: { toolInput: safeStringify(args) },
         },
