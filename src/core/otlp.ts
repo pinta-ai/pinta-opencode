@@ -36,7 +36,7 @@ function processOwner(): string {
   return cachedProcessOwner;
 }
 
-const SDK_VERSION = "0.5.1"; // keep in sync with package.json
+const SDK_VERSION = "0.6.0"; // keep in sync with package.json
 
 /** Identifier/enum keys for which redaction is skipped (truncation still applies). */
 const SKIP_REDACT_KEYS: ReadonlySet<string> = new Set([
