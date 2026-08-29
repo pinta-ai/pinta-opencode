@@ -40,11 +40,12 @@ const SDK_VERSION = "0.6.0"; // keep in sync with package.json
 
 /** Identifier/enum keys for which redaction is skipped (truncation still applies). */
 const SKIP_REDACT_KEYS: ReadonlySet<string> = new Set([
-  "opencode.kind",
+  "opencode.hook",
   "opencode.event_type",
-  "opencode.tool",
+  "opencode.tool_name",
   "opencode.session_id", "opencode.sessionID",
-  "opencode.call_id", "opencode.callID",
+  "opencode.tool_use_id",
+  "opencode.cwd",
   "opencode.agent",
   "opencode.model",
   "opencode.exit",
@@ -52,12 +53,16 @@ const SKIP_REDACT_KEYS: ReadonlySet<string> = new Set([
   "opencode.title",
 ]);
 
-/** Keys that may carry shell command / tool payload text → bash redaction context. */
+/**
+ * Keys that may carry shell command / tool payload text → bash redaction context.
+ *
+ * These have to track the field names telemetry.ts emits. A rename that misses
+ * this set fails nothing on its own — the value keeps flowing, unmasked — so
+ * telemetry.test.ts asserts the masking through the real pipeline.
+ */
 const BASH_CONTEXT_KEYS: ReadonlySet<string> = new Set([
-  "opencode.args",
-  "opencode.input",
-  "opencode.output",
   "opencode.tool_input",
+  "opencode.tool_response",
 ]);
 
 const ATTR_POLICY: AttrPolicy = {
