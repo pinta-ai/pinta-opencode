@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0
+
+- Telemetry now names each tool span by the opencode hook it arrived on
+  (`opencode.hook` = `tool.execute.before` / `tool.execute.after` / `event`) —
+  the same string the guard leg already sends as `method` — and reports
+  `opencode.cwd`, which the guard leg already sent and this leg never did.
+
+  Before this, the two halves of one tool call described it differently
+  (`kind: "tool.before"` vs `method: "tool.execute.before"`) and the ingest
+  parser dropped **every** span this plugin emitted, so opencode activity was
+  guarded but never recorded. The parser side was widened first
+  (`@pinta-ai/guard-runtime` 0.27.0) so already-installed copies of this plugin
+  are recorded too; this release makes new installs speak the aligned names
+  from the start.
+
+  Tool fields follow the same vocabulary as the other adapters:
+  `tool_name` / `tool_input` / `tool_response` / `tool_use_id`. Nothing is sent
+  under two names — the parser accepts the old spelling on behalf of installed
+  copies, and a field carried twice is a field whose copies can disagree.
+
+  The redaction policy tracks the renamed keys, so shell secrets in
+  `tool_input` / `tool_response` are still masked.
+
 ## 0.5.1
 
 - Bump `@pinta-ai/core` `^0.3.0` → `^0.5.0` (devDependency, bundled
