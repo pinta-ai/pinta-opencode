@@ -51,10 +51,10 @@ describe("integration (real collector + guard)", () => {
     await h["tool.execute.after"]({ tool: "bash", sessionID: "ses_1", callID: "c1" }, { title: "t", output: "hi", metadata: { exit: 0 } });
     // give async sends a tick
     await new Promise((r) => setTimeout(r, 30));
-    const kinds = spans.flatMap((p) => p.resourceSpans[0].scopeSpans[0].spans[0].attributes)
-      .filter((a: any) => a.key === "opencode.kind").map((a: any) => a.value.stringValue);
-    expect(kinds).toContain("tool.before");
-    expect(kinds).toContain("tool.after");
+    const hooksSeen = spans.flatMap((p) => p.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+      .filter((a: any) => a.key === "opencode.hook").map((a: any) => a.value.stringValue);
+    expect(hooksSeen).toContain("tool.execute.before");
+    expect(hooksSeen).toContain("tool.execute.after");
   });
 
   it("DENY: before hook throws the reason and blocks the tool", async () => {
