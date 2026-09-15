@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { parseHeadersEnv } from "@pinta-ai/core";
 import { loadEnvFile } from "./env-file.js";
 
@@ -46,6 +48,58 @@ function resolveEndpoint(options: PintaOptions): string | undefined {
  * Resolve runtime config. Precedence: plugin options → process.env →
  * env-file (unset-only). Both options and env are visible at runtime (verified G5).
  */
+/**
+ * Resolve the opencode version.
+ *
+ * `OPENCODE_VERSION` was the only source read, and opencode does not set it.
+ * Dumping the environment a real plugin sees (opencode 1.18.31, `opencode run`)
+ * returned `OPENCODE=1`, `OPENCODE_PID` and `OPENCODE_CONFIG_DIR` — no version.
+ * Nothing else in reach carries one either:
+ *
+ *   - the plugin input is `{client, project, worktree, directory,
+ *     experimental_workspace, serverUrl, $}`, none of which holds a version
+ *   - the SDK client's namespaces (`app.log/agents`, `project.list/current`,
+ *     `config.get/update/providers`, `path.get`, `vcs.get`, `session.*`, …)
+ *     expose no version call
+ *   - `process.argv` is `["bun", "/$bunfs/root/src/index.js", …]`, a virtual
+ *     path inside the single-file build, so argv cannot be walked
+ *
+ * `process.execPath` can be, and that is the one thing that does work: it is
+ * `…/node_modules/opencode-ai/bin/opencode.exe`, so the package manifest is a
+ * walk up from there. The walk matches on the package name rather than a fixed
+ * depth, so a different install layout moves the answer instead of breaking it.
+ *
+ * `OPENCODE_VERSION` stays first as an explicit override.
+ */
+const OPENCODE_PACKAGE_NAME = "opencode-ai";
+
+function versionFromExecPath(): string | undefined {
+  let dir = path.dirname(process.execPath);
+  for (let i = 0; i < 5; i++) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")) as {
+        name?: unknown;
+        version?: unknown;
+      };
+      if (pkg.name === OPENCODE_PACKAGE_NAME && typeof pkg.version === "string" && pkg.version) {
+        return pkg.version;
+      }
+    } catch {
+      /* keep walking */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+
+function resolveServiceVersion(): string {
+  const explicit = process.env.OPENCODE_VERSION?.trim();
+  if (explicit) return explicit;
+  return versionFromExecPath() ?? "unknown";
+}
+
 export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   loadEnvFile(); // lowest priority — fills only unset process.env keys
 
@@ -69,6 +123,6 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
     relayToken,
     guardTimeoutMs,
     guardDisabled: process.env.PINTA_OPENCODE_GUARD_DISABLED === "1",
-    serviceVersion: process.env.OPENCODE_VERSION || "unknown",
+    serviceVersion: resolveServiceVersion(),
   };
 }
