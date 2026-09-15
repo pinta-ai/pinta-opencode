@@ -24,7 +24,8 @@ export interface ResolvedConfig {
   relayToken?: string;
   guardTimeoutMs: number;
   guardDisabled: boolean;
-  serviceVersion: string;
+  /** Undefined when nothing could resolve it; the OTLP attribute is omitted. */
+  serviceVersion: string | undefined;
 }
 
 /** First non-empty value (option → env precedence), else undefined. */
@@ -70,6 +71,10 @@ function resolveEndpoint(options: PintaOptions): string | undefined {
  * depth, so a different install layout moves the answer instead of breaking it.
  *
  * `OPENCODE_VERSION` stays first as an explicit override.
+ *
+ * When nothing answers, the attribute is omitted rather than set to
+ * `"unknown"`. A placeholder is indistinguishable from a real value downstream
+ * (PTA-347), so the attribute's absence is the honest signal.
  */
 const OPENCODE_PACKAGE_NAME = "opencode-ai";
 
@@ -94,10 +99,10 @@ function versionFromExecPath(): string | undefined {
   return undefined;
 }
 
-function resolveServiceVersion(): string {
+function resolveServiceVersion(): string | undefined {
   const explicit = process.env.OPENCODE_VERSION?.trim();
   if (explicit) return explicit;
-  return versionFromExecPath() ?? "unknown";
+  return versionFromExecPath();
 }
 
 export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
