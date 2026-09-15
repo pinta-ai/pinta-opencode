@@ -78,10 +78,14 @@ function flattenFields(fields: Record<string, unknown>): OtlpAttribute[] {
   return out;
 }
 
-function resourceAttrs(serviceVersion: string): OtlpAttribute[] {
+function resourceAttrs(serviceVersion: string | undefined): OtlpAttribute[] {
   return [
     { key: "service.name", value: { stringValue: "opencode" } },
-    { key: "service.version", value: { stringValue: serviceVersion } },
+    // Omitted when unresolved — the absence is the honest signal, not "unknown".
+    // A placeholder is indistinguishable from a real value downstream (PTA-347).
+    ...(serviceVersion
+      ? [{ key: "service.version", value: { stringValue: serviceVersion } } as OtlpAttribute]
+      : []),
     { key: "telemetry.sdk.name", value: { stringValue: "pinta-opencode" } },
     { key: "telemetry.sdk.language", value: { stringValue: "nodejs" } },
     { key: "telemetry.sdk.version", value: { stringValue: SDK_VERSION } },
@@ -96,7 +100,8 @@ export function buildOtlpPayload(args: {
   name: string;
   traceId: string; // ULID (26 chars)
   fields: Record<string, unknown>;
-  serviceVersion: string;
+  /** Undefined when nothing could resolve it; the attribute is then omitted. */
+  serviceVersion: string | undefined;
   now?: number; // ms since epoch; injectable for tests
   guard?: GuardResult | null;
 }): OtlpPayload {
