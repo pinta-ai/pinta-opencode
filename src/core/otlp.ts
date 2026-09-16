@@ -1,4 +1,5 @@
 import os from "os";
+import { ADAPTER_VERSION } from "./version.js";
 import {
   attrsFromRecord,
   buildPayload,
@@ -36,7 +37,7 @@ function processOwner(): string {
   return cachedProcessOwner;
 }
 
-const SDK_VERSION = "0.7.0"; // keep in sync with package.json
+const SDK_VERSION = ADAPTER_VERSION;
 
 /** Identifier/enum keys for which redaction is skipped (truncation still applies). */
 const SKIP_REDACT_KEYS: ReadonlySet<string> = new Set([
