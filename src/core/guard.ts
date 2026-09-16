@@ -5,6 +5,7 @@
 // is resolved at init, after this module is already imported.
 import { evaluateGuard as coreEvaluateGuard } from "@pinta-ai/core";
 import type { GuardInput, GuardResult } from "@pinta-ai/core";
+import { ADAPTER_VERSION } from "./version.js";
 
 export type { GuardInput, GuardResult } from "@pinta-ai/core";
 
@@ -20,9 +21,10 @@ export interface GuardOptions {
 const DEFAULT_TIMEOUT_MS = 50;
 
 // Self-identify to the manager's guard route so it can attribute calls to this
-// adaptor (the route parses `pinta-*/<version>` out of the User-Agent). Keep the
-// version in sync with package.json.
-const GUARD_UA = "pinta-opencode/0.7.0";
+// adaptor (the route parses `pinta-*/<version>` out of the User-Agent). Derived
+// from ADAPTER_VERSION rather than written out: a copy here shipped 0.7.0 on
+// the 0.8.0 release, under a comment telling the reader to keep it in sync.
+const GUARD_UA = `pinta-opencode/${ADAPTER_VERSION}`;
 
 /**
  * Query the external guard policy server. Fail-open on every error path
