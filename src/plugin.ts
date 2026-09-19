@@ -1,6 +1,7 @@
 import { resolveConfig, type PintaOptions } from "./config.js";
 import { Transport } from "./core/transport.js";
 import { TraceManager } from "./core/trace.js";
+import { attachGuard } from "@pinta-ai/core";
 import { evaluateGuard, type GuardResult } from "./core/guard.js";
 import { Telemetry, type OpencodeEvent, type ToolBeforeInput, type ToolAfterOutput } from "./telemetry.js";
 
@@ -48,30 +49,23 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
   async function guardAndTrace(input: ToolBeforeInput, args: unknown): Promise<GuardResult | null> {
     let guard: GuardResult | null = null;
     try {
-      // `method` is the opencode hook this arrived on. It is deliberately not a
-      // Claude Code hook name, and that is the useful part: the manager only
-      // trusts a tool name when it can see a CC hook behind it, so naming the
-      // real event stops an opencode tool called `read` from being taken for
-      // Claude Code's and having its arguments read as content (PTA-207).
-      //
-      // `cwd` is this process's directory, which for an in-process plugin is
-      // opencode's own — the directory its relative tool paths resolve against.
-      // The manager resolves targets the same way before judging them, so
-      // `rm -rf passwd` is no longer read as routine work regardless of where
-      // it erases from (PTA-176).
+      // The span is built BEFORE the guard is asked, and the guard is asked
+      // about that span. Since core 0.8.0 it is the one reading of the
+      // invocation, judged by the manager through the same AgentEvent assembly
+      // the backend stores it with. Until then the guard got a hand-picked
+      // summary beside the span — `method` naming the opencode hook so the
+      // manager would not take a tool called `read` for Claude Code's
+      // (PTA-207), `cwd` so a relative target could be located (PTA-176) —
+      // and the summary and the span were free to drift. Both facts are on
+      // the span as `opencode.hook` and `opencode.cwd`.
+      const payload = telemetry.toolBeforePayload(input, args);
       guard = await evaluateGuard(
-        {
-          spanId: input.sessionID,
-          toolName: input.tool,
-          method: "tool.execute.before",
-          cwd: process.cwd(),
-          toolInput: args,
-          rawTextFields: { toolInput: safeStringify(args) },
-        },
+        payload,
         config.guardEndpoint,
         { timeoutMs: config.guardTimeoutMs, token: config.relayToken, disabled: config.guardDisabled },
       );
-      await telemetry.toolBefore(input, args, guard);
+      // The verdict rides on the span the guard judged — same spanId.
+      await telemetry.send(attachGuard(payload, guard));
     } catch (err) {
       warn("tool.execute.before", err); // telemetry/guard infra errors are fail-open
     }
@@ -104,13 +98,5 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
     ),
   };
 };
-
-function safeStringify(v: unknown): string {
-  try {
-    return typeof v === "string" ? v : JSON.stringify(v) ?? "";
-  } catch {
-    return String(v);
-  }
-}
 
 export default PintaOpencode;

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0
+
+- The guard is asked about the span, not about a summary of it. Until now the
+  `PreToolUse` gate assembled a five-field `GuardInput` (tool name, input, working
+  directory, hook, session) beside the span that carried the same facts under
+  `opencode.*`, and the two were free to drift — `cwd` (PTA-176) and the hook name
+  (PTA-207) were on the span and missing from the summary. Now the span is built
+  first, `POST /guard/evaluate` receives that OTLP payload unwrapped, the manager
+  projects it through the same AgentEvent assembly the backend stores it with,
+  and the verdict is attached to the same object before it is relayed — the span
+  the manager judged is the span the backend stores, `spanId` included.
+  Requires Pinta Manager 0.1.11 or later; an older manager answers `400` and the
+  gate fails open (`pinta.guard.fail_open_reason: error`), a newer manager that
+  refuses a body answers `410`, recorded as `refused`.
+- `@pinta-ai/core` `^0.6.0` → `^0.8.0` (`evaluateGuard(payload)`, `attachGuard`). `Telemetry.toolBeforePayload` builds the
+  span the guard is asked about; `Telemetry.send` relays it once the verdict is
+  attached.
+
+## 0.8.0
+
+- Version derived from one literal (`src/core/version.ts`); the build fails on drift.
+
 ## 0.7.0
 
 - Telemetry now names each tool span by the opencode hook it arrived on
