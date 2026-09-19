@@ -63,13 +63,16 @@ Telemetry and governance are independent — endpoint only, guard only, both, or
 
 ## Guard (allow / deny + reason)
 
-On `tool.execute.before` the adapter POSTs to the guard endpoint (cc/codex/copilot contract — backend unchanged):
+On `tool.execute.before` the adapter POSTs the span it is about to relay to the guard endpoint (cc/codex/copilot contract — `@pinta-ai/core` ≥ 0.8.0):
 
 ```
 POST {guard}   header: x-pinta-relay-token: {PINTA_RELAY_TOKEN}
-body: { "input": { "spanId", "toolName", "toolInput", "rawTextFields": { "toolInput" } } }
+body: the OTLP payload itself — { "resourceSpans": [ … one span, opencode.* attributes … ] }
 200: { "decision": "ALLOW"|"DENY"|"REVIEW", "reason", "userMessage?", "durationMs?" }
+410: the manager no longer accepts this body shape → recorded as fail-open `refused`
 ```
+
+The verdict is then attached to that same span (`pinta.guard.*`) before it is sent, so the span the guard judged is the span the collector stores.
 
 A `DENY` becomes `throw new Error(userMessage ?? reason ?? "guard_deny")`. Verified effect: **only that tool is blocked** (`tool.execute.after` does not fire), the reason shows as `✗ … failed` + `Error: <reason>` to the model/TUI, and the session stays alive. `ALLOW`/`REVIEW` pass through.
 

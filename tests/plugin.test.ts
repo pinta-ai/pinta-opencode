@@ -50,21 +50,19 @@ describe("plugin", () => {
 });
 
 /**
- * What the guard is told about the invocation.
+ * The guard is asked about the span the plugin is about to relay.
  *
- * `method` names the opencode hook, and it is deliberately not a Claude Code
- * hook name: the manager only trusts a tool name when it can see a CC hook
- * behind it, so naming the real event stops an opencode tool called `read`
- * from being taken for Claude Code's and having its arguments read as content
- * rather than as a command (PTA-207).
- *
- * `cwd` is this process's directory — for an in-process plugin, opencode's
- * own, the directory its relative tool paths resolve against. Without it
- * `rm -rf passwd` reads as routine work no matter where it erases from
- * (PTA-176).
+ * It used to get a hand-picked summary of the invocation: `method` naming the
+ * opencode hook, deliberately not a Claude Code hook name, so the manager would
+ * not take a tool called `read` for Claude Code's and read its arguments as
+ * content (PTA-207); `cwd`, this process's directory, so a relative target
+ * could be located (PTA-176). Both are on the span as `opencode.hook` and
+ * `opencode.cwd`, and since core 0.8.0 the span itself is what the manager
+ * reads — projected through the same AgentEvent assembly the backend stores
+ * it with. One reading, judged and stored alike.
  */
-describe("plugin — what the guard is told about the invocation", () => {
-  it("puts the event and the working directory on the wire", async () => {
+describe("plugin — the guard is asked about the span that is then sent", () => {
+  it("puts the span — event and working directory included — on the wire, unwrapped", async () => {
     const fetchMock = okFetch({ decision: "ALLOW", reason: null });
     vi.stubGlobal("fetch", fetchMock);
     const hooks = await PintaOpencode({}, { guard: "http://guard" });
@@ -76,9 +74,16 @@ describe("plugin — what the guard is told about the invocation", () => {
       String(c[0]).includes("guard"),
     );
     const sent = JSON.parse(String((guardCall?.[1] as { body?: string })?.body));
-    expect(sent.input).toMatchObject({
-      method: "tool.execute.before",
-      cwd: process.cwd(),
+    expect("input" in sent).toBe(false);
+    const attrs = Object.fromEntries(
+      sent.resourceSpans[0].scopeSpans[0].spans[0].attributes.map((a: { key: string; value: { stringValue?: string } }) => [a.key, a.value.stringValue]),
+    );
+    expect(attrs).toMatchObject({
+      "ingest.type": "opencode",
+      "opencode.hook": "tool.execute.before",
+      "opencode.cwd": process.cwd(),
+      "opencode.tool_name": "bash",
     });
+    expect(attrs["opencode.tool_input"]).toContain("rm -rf passwd");
   });
 });

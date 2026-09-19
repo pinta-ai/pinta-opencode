@@ -1,3 +1,4 @@
+import { attachGuard } from "@pinta-ai/core";
 import { describe, it, expect } from "vitest";
 import { buildOtlpPayload, ulidToTraceId } from "../src/core/otlp.js";
 
@@ -30,14 +31,15 @@ describe("otlp", () => {
     expect(p.resourceSpans[0].resource.attributes.find((x) => x.key === "service.name")?.value).toEqual({ stringValue: "opencode" });
   });
 
-  it("attaches guard attributes", () => {
+  it("carries no guard attributes itself; the verdict is attached to the same span afterwards", () => {
     const p = buildOtlpPayload({
       name: "opencode.tool.before",
       traceId: ULID,
       fields: { kind: "tool.before" },
       serviceVersion: "x",
-      guard: { decision: "DENY", reason: "rule_x", userMessage: null, durationMs: 3 },
     });
+    expect(Object.keys(attrs(p)).some((k) => k.startsWith("pinta.guard."))).toBe(false);
+    attachGuard(p, { decision: "DENY", reason: "rule_x", userMessage: null, durationMs: 3 });
     const a = attrs(p);
     expect(a["pinta.guard.decision"]).toBe("deny");
     expect(a["pinta.guard.matched_rule"]).toBe("rule_x");

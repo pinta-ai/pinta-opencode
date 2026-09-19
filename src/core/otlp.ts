@@ -6,7 +6,6 @@ import {
   mergeBatch,
   ulidToTraceId,
   type AttrPolicy,
-  type GuardResult,
   type OtlpAttribute,
   type OtlpPayload,
 } from "@pinta-ai/core";
@@ -104,7 +103,6 @@ export function buildOtlpPayload(args: {
   /** Undefined when nothing could resolve it; the attribute is then omitted. */
   serviceVersion: string | undefined;
   now?: number; // ms since epoch; injectable for tests
-  guard?: GuardResult | null;
 }): OtlpPayload {
   return buildPayload({
     traceId: args.traceId,
@@ -113,6 +111,5 @@ export function buildOtlpPayload(args: {
     resource: resourceAttrs(args.serviceVersion),
     scope: { name: "pinta-opencode", version: SDK_VERSION },
     now: args.now,
-    guard: args.guard,
   });
 }

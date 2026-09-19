@@ -3,11 +3,15 @@
 // <version>` User-Agent, and options passed explicitly (not read from
 // process.env) because the plugin is a long-lived in-process module whose config
 // is resolved at init, after this module is already imported.
+//
+// Since core 0.8.0 the guard is asked about the OTLP payload the plugin is
+// about to relay — the same object, built first — rather than a hand-assembled
+// summary of the invocation. See `plugin.ts`.
 import { evaluateGuard as coreEvaluateGuard } from "@pinta-ai/core";
-import type { GuardInput, GuardResult } from "@pinta-ai/core";
+import type { GuardPayload, GuardResult } from "@pinta-ai/core";
 import { ADAPTER_VERSION } from "./version.js";
 
-export type { GuardInput, GuardResult } from "@pinta-ai/core";
+export type { GuardPayload, GuardResult } from "@pinta-ai/core";
 
 export interface GuardOptions {
   /** Hard timeout. 50ms default keeps the hook snappy; 300ms recommended in prod. */
@@ -33,11 +37,11 @@ const GUARD_UA = `pinta-opencode/${ADAPTER_VERSION}`;
  * is a long-lived in-process module whose config is resolved at init.
  */
 export function evaluateGuard(
-  input: GuardInput,
+  payload: GuardPayload,
   endpoint: string | undefined,
   opts: GuardOptions = {},
 ): Promise<GuardResult | null> {
-  return coreEvaluateGuard(input, endpoint, {
+  return coreEvaluateGuard(payload, endpoint, {
     timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     token: opts.token,
     disabled: opts.disabled,

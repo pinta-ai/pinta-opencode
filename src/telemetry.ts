@@ -1,5 +1,6 @@
 import { Transport } from "./core/transport.js";
 import { TraceManager } from "./core/trace.js";
+import { attachGuard, type OtlpPayload } from "@pinta-ai/core";
 import { buildOtlpPayload } from "./core/otlp.js";
 import type { GuardResult } from "./core/guard.js";
 import type { ResolvedConfig } from "./config.js";
@@ -34,10 +35,18 @@ export class Telemetry {
     private config: ResolvedConfig,
   ) {}
 
-  private async emit(name: string, sessionId: string | undefined, fields: Record<string, unknown>, guard?: GuardResult | null): Promise<void> {
+  private build(name: string, sessionId: string | undefined, fields: Record<string, unknown>): OtlpPayload {
     const traceId = this.trace.currentTrace(sessionId);
-    const payload = buildOtlpPayload({ name, traceId, fields, guard, serviceVersion: this.config.serviceVersion });
+    return buildOtlpPayload({ name, traceId, fields, serviceVersion: this.config.serviceVersion });
+  }
+
+  /** Send a payload built by one of the `*Payload` methods (best-effort by the transport's contract). */
+  async send(payload: OtlpPayload): Promise<void> {
     await this.transport.send(payload);
+  }
+
+  private async emit(name: string, sessionId: string | undefined, fields: Record<string, unknown>): Promise<void> {
+    await this.send(this.build(name, sessionId, fields));
   }
 
   /** Lifecycle span from the `event` hook. Flushes the retry buffer on turn-END. */
@@ -54,14 +63,23 @@ export class Telemetry {
     if (ev.type === "session.idle") await this.transport.flush();
   }
 
-  /** Tool span from `tool.execute.before`, carrying the guard decision. */
-  async toolBefore(input: ToolBeforeInput, args: unknown, guard: GuardResult | null): Promise<void> {
-    await this.emit(
+  /**
+   * Tool span from `tool.execute.before`, before the guard has been asked. The
+   * plugin asks the guard about this payload, attaches the verdict with
+   * `attachGuard`, and sends the same object — so the span the manager judged
+   * is the span the backend stores.
+   */
+  toolBeforePayload(input: ToolBeforeInput, args: unknown): OtlpPayload {
+    return this.build(
       "opencode.tool.before",
       input.sessionID,
       { ...toolIdentity("tool.execute.before", input), tool_input: args },
-      guard,
     );
+  }
+
+  /** Tool span from `tool.execute.before`, carrying an already-known guard decision. */
+  async toolBefore(input: ToolBeforeInput, args: unknown, guard: GuardResult | null): Promise<void> {
+    await this.send(attachGuard(this.toolBeforePayload(input, args), guard));
   }
 
   /** Tool result span from `tool.execute.after`, incl. exit code / truncation. */
