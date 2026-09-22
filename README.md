@@ -13,6 +13,7 @@ opencode fires plugin hooks around every built-in **and** MCP tool. This adapter
 | Hook | Adapter does | Verified payload |
 |---|---|---|
 | `chat.message` | start a new trace (turn boundary) | `{ sessionID, agent, model, messageID, variant }` |
+| `chat.params` | remember exact-message request model evidence (no extra span) | `{ sessionID, agent, model, message }` |
 | `event` | lifecycle span (Bronze flatten) + flush on `session.idle` | `{ event: { id, type, properties } }`, every event carries `properties.sessionID` |
 | `tool.execute.before` | query guard → **`throw` on DENY** + emit span | input `{ tool, sessionID, callID }`, output `{ args }` (full tool args, mutable) |
 | `tool.execute.after` | tool-result span (incl. exit code) | output `{ title, output, metadata{ output, exit, truncated, … } }` |
@@ -90,6 +91,59 @@ Guard is **fail-open** (no endpoint / `PINTA_GUARD_DISABLED=1` / non-200 / timeo
 | `service.name` | `"opencode"` · `telemetry.sdk.name` `"pinta-opencode"` |
 
 Tool spans are built from `tool.execute.before/after` (richer: args, output, exit) rather than the event bus; `event` covers lifecycle and turn boundaries.
+
+### Model evidence and limits
+
+`opencode.model` is the exact scalar ID, never a serialized model object or an
+`unknown` default. `opencode.model_source` records its provenance;
+`opencode.provider` carries an explicitly supplied `providerID`.
+
+| Evidence | Source / scope |
+| --- | --- |
+| `message.updated.info.modelID` (assistant) | `reported:message.updated.info.modelID`; exact session + assistant message |
+| `message.updated.info.model.{modelID,id}` (user) | `requested:message.updated.info.model.…` |
+| `chat.message` output message model, then input model | `requested:chat.message.…`; fallback only for that **user message and agent**, never its subagents |
+| `chat.params.model.{modelID,id}` | `requested:chat.params.model.…`; same user-message + agent constraint |
+| `session.updated.info.model` / `session.next.model.switched.model` | `selected:<event>.<field>` on that event **only**, not a default for tools |
+| Explicit tool or other event `model` / `modelID` | `reported:tool.…` / `reported:event.…` |
+
+The [plugin callbacks](https://github.com/anomalyco/opencode/blob/v1.15.3/packages/plugin/src/index.ts)
+and [message/part schemas](https://github.com/anomalyco/opencode/blob/v1.15.3/packages/opencode/src/session/message-v2.ts)
+agree with this repository's `phase1-e2e-events.jsonl`. OpenCode constructs an
+assistant's `modelID` from the selected model **before** the provider replies
+([prompt implementation](https://github.com/anomalyco/opencode/blob/v1.15.3/packages/opencode/src/session/prompt.ts)).
+It is therefore *reported selection*, **not proof of the actual routed
+response model** (notably for routers and fallback providers).
+
+Tool hooks carry only `sessionID` + `callID`. They receive a model only when a
+`message.part.updated` tool part joins that exact call to a message with model
+evidence in the same session. Correlated `opencode.message_id` and
+`opencode.agent` accompany it when available. No latest-message/session default,
+parent-message model, or subtask's requested model is borrowed. Out-of-order
+messages can enrich a later after-span, not retroactively invent a before-span.
+Conflicting identities/models, missing joins and expired evidence are omitted.
+The before model is pinned to its call; switches do not relabel in-flight tools.
+Message-part updates/deltas likewise use only their own message's evidence.
+Consumed calls cannot be reopened by delayed part events. Idle (`session.idle`
+or `session.status` with `status.type=idle`), deleted and errored sessions clear
+their state; a new chat/session start reopens them.
+
+Memory is per plugin instance, capped globally at **1,024 message entries,
+512 request entries, 2,048 call entries, 128 ended-session markers**. Model,
+request and call entries expire **15 minutes after their last update**.
+Identifiers over 1,024 characters are not cached or treated as model IDs.
+Normal resolution uses fixed field checks and O(1)
+map lookups; end/removal cleanup examines at most those bounded maps. **No
+added file reads, host commands, network requests, timers or spans.**
+
+Blank/non-string/placeholder IDs (`unknown`, `undefined`, `null`, `n/a`, `none`,
+`-`, `auto`, `default`) are omitted. Every trimmed ID beginning with `{` or `[`
+is also omitted, including malformed/truncated JSON-like strings without a
+closing brace. Objects/conflicting top-level model fields
+remain in `opencode.model_raw`; raw nested `info` / `part` payloads stay intact.
+Existing redaction, tool guards, event counts and errors are unchanged. A host
+that never exposes a model (or its exact call/message relationship) stays
+unattributed rather than being assigned an unrelated model.
 
 ## Architecture
 

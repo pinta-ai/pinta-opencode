@@ -80,6 +80,7 @@ opencode가 발화하는 hook과 본 어댑터의 처리:
 |---|---|---|
 | `event` | `{event:{id, type, properties}}`. 모든 이벤트 `properties.sessionID` 보유 | 라이프사이클 span(Bronze flatten). turn-END(`session.idle`)에 flush |
 | `chat.message` | `{sessionID, agent, model, messageID, variant}` | **turn-START → 새 trace 회전** |
+| `chat.params` | `{sessionID, agent, model, message}` | requested model evidence only, keyed by session/message/agent; no new span |
 | `tool.execute.before` | input `{tool, sessionID, callID}`, output `{args}`(변형가능 전체 인자) | **guard 평가 → DENY면 throw(사유)**, span 전송 |
 | `tool.execute.after` | input `{tool, sessionID, callID, args}`, output `{title, output, metadata, attachments}` (bash metadata=`{output,exit,description,truncated}`) | tool 결과 span(exit·truncated 포함) |
 | `tool.definition` | `{toolID}` | (선택) tool 인벤토리 관측 |
@@ -100,6 +101,18 @@ opencode가 발화하는 hook과 본 어댑터의 처리:
 - **traceId**: ULID → 32-hex 변환(core `otlp.ts` 재사용).
 - **Redaction**: 전송 전 core `redact.ts`(AWS/GCP/GitHub/JWT/PEM/DB-URL 등 마스킹) + 100KB 트렁케이션. tool args·output에 적용.
 - **Transport**: `endpoint` 미설정 시 silent-disable. 5s 타임아웃, 실패 시 in-memory(+선택 디스크) retry-queue, 다음 이벤트에 batched flush.
+
+### Model attribution
+
+`opencode.model` is reserved for a non-placeholder scalar model ID.
+`opencode.model_source` distinguishes reported/requested/session-selected
+evidence, and `opencode.provider` preserves an explicit provider ID. Tool
+attribution requires an exact session + callID → messageID join from the tool
+part event; it never uses a global/session "last model". Raw objects stay in
+`model_raw` or their original nested `info`/`part`. The assistant's reported
+model is not asserted to be the provider's actual response identity.
+See [Model evidence and limits](./README.md#model-evidence-and-limits) for
+verified shapes, precedence, bounded cache lifetime and omission behavior.
 
 ---
 
