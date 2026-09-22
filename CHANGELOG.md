@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0
+
+- Emit exact scalar `opencode.model` with source/provider evidence from verified
+  host model shapes. Preserve original nested fields and conflicting top-level
+  model values; omit blanks, placeholders and every JSON-prefixed ID, including
+  malformed/truncated strings.
+- Correlate tool models through the exact session + callID -> messageID join.
+  Request evidence is scoped to its user message and agent, not reused as a
+  session default. Bounded caches handle switches, subagents, concurrent
+  sessions, out-of-order updates, stale state and end/removal events without
+  borrowing an unrelated model.
+- Report assistant metadata as host selection, not proof of actual provider
+  response identity. Span counts, guard behavior and redaction remain unchanged;
+  model resolution adds no file scans, host commands or network requests.
+- Pinta Manager 0.1.11 or later remains the guard-payload compatibility floor,
+  with `@pinta-ai/core` still at `^0.8.0` and no new required envelope fields or
+  additional desktop upgrade.
+
+Refs PTA-524.
+
 ## 0.9.0
 
 - The guard is asked about the span, not about a summary of it. Until now the
