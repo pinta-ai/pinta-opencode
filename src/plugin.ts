@@ -4,6 +4,7 @@ import { TraceManager } from "./core/trace.js";
 import { attachGuard } from "@pinta-ai/core";
 import { evaluateGuard, type GuardResult } from "./core/guard.js";
 import { Telemetry, type OpencodeEvent, type ToolBeforeInput, type ToolAfterOutput } from "./telemetry.js";
+import type { ChatMessageInput, ChatMessageOutput, ChatParamsInput, ChatParamsOutput } from "./model.js";
 
 function warn(scope: string, err: unknown): void {
   process.stderr.write(`[pinta-opencode] ${scope}: ${(err as Error)?.message ?? String(err)}\n`);
@@ -74,8 +75,13 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
 
   return {
     // turn-START → rotate a new trace for this session.
-    "chat.message": failOpen("chat.message", async (input: { sessionID?: string }) => {
+    "chat.message": failOpen("chat.message", async (input: ChatMessageInput, output?: ChatMessageOutput) => {
       trace.newTrace(input?.sessionID);
+      telemetry.chatMessage(input, output);
+    }),
+
+    "chat.params": failOpen("chat.params", async (input: ChatParamsInput, _output?: ChatParamsOutput) => {
+      telemetry.chatParams(input);
     }),
 
     // lifecycle telemetry; flushes the retry buffer on session.idle (turn-END).

@@ -4,6 +4,10 @@ import { attachGuard, type OtlpPayload } from "@pinta-ai/core";
 import { buildOtlpPayload } from "./core/otlp.js";
 import type { GuardResult } from "./core/guard.js";
 import type { ResolvedConfig } from "./config.js";
+import {
+  ModelTracker, eventSessionID, modelFields, record,
+  type ChatMessageInput, type ChatMessageOutput, type ChatParamsInput, type ToolModelInput,
+} from "./model.js";
 
 export interface OpencodeEvent {
   id?: string;
@@ -11,11 +15,7 @@ export interface OpencodeEvent {
   properties?: Record<string, unknown>;
 }
 
-export interface ToolBeforeInput {
-  tool: string;
-  sessionID: string;
-  callID: string;
-}
+export interface ToolBeforeInput extends ToolModelInput {}
 
 export interface ToolAfterOutput {
   title?: string;
@@ -29,6 +29,8 @@ export interface ToolAfterOutput {
  * exit) rather than the event bus; `event` covers lifecycle + turn boundaries.
  */
 export class Telemetry {
+  private models = new ModelTracker();
+
   constructor(
     private transport: Transport,
     private trace: TraceManager,
@@ -49,17 +51,26 @@ export class Telemetry {
     await this.send(this.build(name, sessionId, fields));
   }
 
+  chatMessage(input: ChatMessageInput, output?: ChatMessageOutput): void {
+    this.models.chatMessage(input, output);
+  }
+
+  chatParams(input: ChatParamsInput): void {
+    this.models.chatParams(input);
+  }
+
   /** Lifecycle span from the `event` hook. Flushes the retry buffer on turn-END. */
   async lifecycle(ev: OpencodeEvent): Promise<void> {
-    const props = ev.properties ?? {};
-    const sessionId = typeof props.sessionID === "string" ? props.sessionID : undefined;
-    await this.emit(`opencode.event.${ev.type ?? "unknown"}`, sessionId, {
+    const props = record(ev.properties) ?? {};
+    const sessionId = eventSessionID(ev.type, props);
+    const model = this.models.event(ev.type, props);
+    await this.emit(`opencode.event.${ev.type ?? "unknown"}`, sessionId, modelFields({
       hook: "event",
       event_type: ev.type,
       session_id: sessionId,
       cwd: process.cwd(),
       ...props,
-    });
+    }, model));
     if (ev.type === "session.idle") await this.transport.flush();
   }
 
@@ -73,7 +84,10 @@ export class Telemetry {
     return this.build(
       "opencode.tool.before",
       input.sessionID,
-      { ...toolIdentity("tool.execute.before", input), tool_input: args },
+      modelFields(
+        { ...toolIdentity("tool.execute.before", input), tool_input: args },
+        this.models.beforeTool(input),
+      ),
     );
   }
 
@@ -85,13 +99,13 @@ export class Telemetry {
   /** Tool result span from `tool.execute.after`, incl. exit code / truncation. */
   async toolAfter(input: ToolBeforeInput, output: ToolAfterOutput): Promise<void> {
     const meta = output.metadata ?? {};
-    await this.emit("opencode.tool.after", input.sessionID, {
+    await this.emit("opencode.tool.after", input.sessionID, modelFields({
       ...toolIdentity("tool.execute.after", input),
       title: output.title,
       tool_response: output.output,
       exit: meta.exit,
       truncated: meta.truncated,
-    });
+    }, this.models.afterTool(input)));
   }
 }
 
@@ -120,5 +134,10 @@ function toolIdentity(hook: string, input: ToolBeforeInput): Record<string, unkn
     session_id: input.sessionID,
     tool_use_id: input.callID,
     cwd: process.cwd(),
+    ...(input.model !== undefined ? { model: input.model } : {}),
+    ...(input.modelID !== undefined ? { modelID: input.modelID } : {}),
+    ...(input.providerID !== undefined ? { providerID: input.providerID } : {}),
+    ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    ...(input.messageID !== undefined ? { message_id: input.messageID } : {}),
   };
 }
