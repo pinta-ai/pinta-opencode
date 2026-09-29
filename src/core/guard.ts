@@ -1,6 +1,6 @@
-// opencode-specific binding over the shared guard in @pinta-ai/core. Preserves
-// the historical opencode behavior: 50ms default timeout, a `pinta-opencode/
-// <version>` User-Agent, and options passed explicitly (not read from
+// opencode-specific binding over the shared guard in @pinta-ai/core: a 100ms
+// default timeout, a `pinta-opencode/<version>` User-Agent, and options passed
+// explicitly (not read from
 // process.env) because the plugin is a long-lived in-process module whose config
 // is resolved at init, after this module is already imported.
 //
@@ -14,7 +14,10 @@ import { ADAPTER_VERSION } from "./version.js";
 export type { GuardPayload, GuardResult } from "@pinta-ai/core";
 
 export interface GuardOptions {
-  /** Hard timeout. 50ms default keeps the hook snappy; 300ms recommended in prod. */
+  /**
+   * Hard timeout (default 100ms). The plugin awaits the verdict before the
+   * tool runs, so this is how long a tool call can stall on the guard.
+   */
   timeoutMs?: number;
   /** Sent as x-pinta-relay-token. */
   token?: string;
@@ -22,7 +25,13 @@ export interface GuardOptions {
   disabled?: boolean;
 }
 
-const DEFAULT_TIMEOUT_MS = 50;
+// 100ms, up from 50 (PTA-579). At 50 a manager answering in its normal range
+// still lost the race often enough to show up as timeout fail-opens, and the
+// manager — planning its own work around the adaptor's timeout — gave up on
+// the backend package check at 40ms. Core >=0.9.0 declares whatever value
+// ends up here to the manager as `x-pinta-guard-budget-ms`, so the manager
+// follows this number (and any override) instead of a copy it keeps itself.
+const DEFAULT_TIMEOUT_MS = 100;
 
 // Self-identify to the manager's guard route so it can attribute calls to this
 // adaptor (the route parses `pinta-*/<version>` out of the User-Agent). Derived

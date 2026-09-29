@@ -13,7 +13,7 @@ export interface PintaOptions {
   guard?: string;
   /** Relay token (sent as x-pinta-relay-token). */
   token?: string;
-  /** Guard client timeout in ms (default 50). */
+  /** Guard client timeout in ms (default 100). */
   guardTimeoutMs?: number;
 }
 
@@ -119,7 +119,7 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
   }
 
   const guardTimeoutMs =
-    options.guardTimeoutMs ?? (Number(process.env.PINTA_OPENCODE_GUARD_TIMEOUT_MS) || 50);
+    options.guardTimeoutMs ?? (Number(process.env.PINTA_OPENCODE_GUARD_TIMEOUT_MS) || 100);
 
   return {
     endpoint: resolveEndpoint(options),

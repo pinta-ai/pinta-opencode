@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.0
+
+- Guard default timeout 50ms -> 100ms. At 50ms a manager answering in its
+  normal range still lost the race often enough to show up as timeout
+  fail-opens. The plugin awaits the verdict in-process before the tool runs
+  (`tool.execute.before`), so a tool call can now stall on the guard for up to
+  100ms instead of 50ms. `PINTA_OPENCODE_GUARD_TIMEOUT_MS` / `guardTimeoutMs`
+  still override it.
+- `@pinta-ai/core` `^0.8.0` -> `^0.9.0`: the effective timeout (default or
+  override) is declared to the manager as `x-pinta-guard-budget-ms`. Manager
+  0.1.10+ plans its own work around it instead of the 50ms it had copied for
+  this adaptor, so the backend package check gets 80ms rather than 40ms. Older
+  managers ignore the header.
+- README no longer says the guard never blocks tool execution; it does, for up
+  to the timeout.
+- Pinta Manager 0.1.11 or later remains the guard-payload compatibility floor.
+
+Refs PTA-579.
+
 ## 0.10.0
 
 - Emit exact scalar `opencode.model` with source/provider evidence from verified
