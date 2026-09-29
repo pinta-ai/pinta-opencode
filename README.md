@@ -57,7 +57,7 @@ PINTA_OPENCODE_GUARD=https://your-relay.example.com/guard
 | `headers` / `PINTA_OPENCODE_HEADERS` | `key=val,key=val` request headers (auth). Falls back to `OTEL_EXPORTER_OTLP_HEADERS`. |
 | `guard` / `PINTA_OPENCODE_GUARD` | Optional. POST'd on `tool.execute.before`; a `DENY` blocks the tool. No endpoint → governance disabled. |
 | `token` / `PINTA_OPENCODE_TOKEN` | Sent as `x-pinta-relay-token` on guard + OTLP. |
-| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | Guard client timeout (default `50`; `300` recommended in production for cold-start). |
+| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | Guard client timeout (default `100`). Declared to the Pinta Manager as its budget, so raising it also lets the manager wait longer. |
 | `PINTA_OPENCODE_GUARD_DISABLED=1` | Force-disable the guard. |
 
 Telemetry and governance are independent — endpoint only, guard only, both, or neither all work.
@@ -77,7 +77,7 @@ The verdict is then attached to that same span (`pinta.guard.*`) before it is se
 
 A `DENY` becomes `throw new Error(userMessage ?? reason ?? "guard_deny")`. Verified effect: **only that tool is blocked** (`tool.execute.after` does not fire), the reason shows as `✗ … failed` + `Error: <reason>` to the model/TUI, and the session stays alive. `ALLOW`/`REVIEW` pass through.
 
-Guard is **fail-open** (no endpoint / `PINTA_GUARD_DISABLED=1` / non-200 / timeout / error → allow), so it never breaks a session. The 50ms inline call does not block tool execution.
+Guard is **fail-open** (no endpoint / `PINTA_GUARD_DISABLED=1` / non-200 / timeout / error → allow), so it never breaks a session. The call is awaited before the tool runs, so a tool call stalls on it for at most the guard timeout (100ms by default).
 
 ## Span conventions
 
@@ -157,7 +157,7 @@ src/
 │   ├── trace.ts          # ULID trace, keyed by sessionID, rotated on chat.message
 │   ├── transport.ts      # POST OTLP/HTTP traces (5s), in-memory retry queue
 │   ├── retry-queue.ts    # batched flush on next event
-│   ├── guard.ts          # POST PINTA_GUARD_ENDPOINT (50ms), fail-open
+│   ├── guard.ts          # POST PINTA_GUARD_ENDPOINT (100ms), fail-open
 │   └── redact.ts         # Tier-1 redaction + Tier-3 truncation
 ```
 

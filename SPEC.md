@@ -32,7 +32,7 @@ pinta-opencode는 opencode에 로드되는 단일 플러그인으로:
    tool.execute.after ─▶ Telemetry.tool(after)           ── OTLP span ─┤                  │
                                                                        ▼                  ▼
                                                        Transport(OTLP) ──▶ Pinta relay   Guard server
-                                                       (5s, retry)         (collector)   (50ms, fail-open)
+                                                       (5s, retry)         (collector)   (100ms, fail-open)
 ```
 
 - **재사용 core**(cc/copilot에서 포팅): `otlp` / `redact` / `transport` / `retry-queue` / `guard` / `trace`.
@@ -63,7 +63,7 @@ pinta-opencode는 opencode에 로드되는 단일 플러그인으로:
 | `headers` / `PINTA_OPENCODE_HEADERS` (또는 `OTEL_EXPORTER_OTLP_HEADERS`) | `k=v,k=v` 헤더 | — |
 | `guard` / `PINTA_OPENCODE_GUARD` | guard 정책 서버 URL | (없으면 거버넌스 비활성) |
 | `token` / `PINTA_OPENCODE_TOKEN` | guard·OTLP 인증 → `x-pinta-relay-token` | — |
-| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | guard 타임아웃 | 50 (운영 300 권장) |
+| `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | guard 타임아웃 | 100 |
 | `PINTA_OPENCODE_GUARD_DISABLED=1` | guard 강제 비활성 | — |
 
 > 모든 env는 `PINTA_OPENCODE_*` 네임스페이스로 통일 — adapter·manager(enroll)·catalog(manifest) 3개 레포가 동일 키 이름을 공유한다.
@@ -125,7 +125,7 @@ body: { input: { spanId, toolName, toolInput, rawTextFields:{toolInput} } }
 응답(200): { decision:"ALLOW"|"DENY"|"REVIEW", reason, userMessage?, durationMs? }
 ```
 - **호출 지점**: `tool.execute.before` (모든 tool — 빌트인+MCP). `guard` 미설정 시 스킵.
-- **타임아웃 50ms(운영 300ms)**, **fail-open**: 미설정 / `PINTA_GUARD_DISABLED=1` / 비200 / 타임아웃 / throw → ALLOW(`fail_open_reason` 기록).
+- **타임아웃 100ms**, **fail-open**: 미설정 / `PINTA_GUARD_DISABLED=1` / 비200 / 타임아웃 / throw → ALLOW(`fail_open_reason` 기록).
 - **집행**: `DENY` → `throw new Error(userMessage ?? reason ?? "guard_deny")`.
   - 검증된 효과(H-A1/G7): **해당 tool만 차단**, `tool.execute.after` 미발화, 사유가 `✗ … failed` + `Error: <사유>`로 TUI/LLM에 환류, **세션 생존**. `REVIEW`/`ALLOW` → 통과(no-op).
 - **사유 우선순위**: `userMessage`(예: `⛔ Blocked by Pinta AI — <rule>`) → `reason` → `"guard_deny"`.
@@ -156,7 +156,7 @@ cc/copilot 슬라이스 복제(pinta-copilot DESIGNDOC §8 패턴):
 - [x] 외부 guard 판정으로 ALLOW/DENY, DENY 시 해당 tool 차단 + 세션 생존.
 - [x] 사유(`⛔ Blocked by Pinta AI — …`)를 에이전트/TUI에 환류.
 - [x] OTLP span을 collector가 수신(라이프사이클 + tool, guard 결과 부착).
-- [x] 50ms fail-open guard가 ALLOW 경로를 막지 않음.
+- [x] 100ms fail-open guard가 ALLOW 경로를 막지 않음.
 - [x] 옵션·env로 endpoint/guard 주입.
 
 ---

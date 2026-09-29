@@ -52,9 +52,17 @@ describe("resolveConfig", () => {
     expect(c.guardDisabled).toBe(true);
   });
 
-  it("defaults guard timeout to 50ms, overridable", () => {
-    expect(resolveConfig().guardTimeoutMs).toBe(50);
+  it("defaults guard timeout to 100ms, overridable", () => {
+    expect(resolveConfig().guardTimeoutMs).toBe(100);
     expect(resolveConfig({ guardTimeoutMs: 300 }).guardTimeoutMs).toBe(300);
+  });
+
+  it("takes the guard timeout from the env, and the option over the env", () => {
+    process.env.PINTA_OPENCODE_GUARD_TIMEOUT_MS = "250";
+    expect(resolveConfig().guardTimeoutMs).toBe(250);
+    expect(resolveConfig({ guardTimeoutMs: 300 }).guardTimeoutMs).toBe(300);
+    process.env.PINTA_OPENCODE_GUARD_TIMEOUT_MS = "not-a-number";
+    expect(resolveConfig().guardTimeoutMs).toBe(100);
   });
 
   it("no endpoint configured → undefined (telemetry disabled)", () => {
