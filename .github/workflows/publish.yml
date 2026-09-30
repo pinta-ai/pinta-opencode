@@ -29,6 +29,9 @@ jobs:
       # step would make npm send it to npmjs instead of using OIDC.
       - run: npm ci
         env:
+          # Ignore setup-node's npmjs NODE_AUTH_TOKEN binding while installing.
+          # The project .npmrc binds this token to GitHub Packages only.
+          NPM_CONFIG_USERCONFIG: /dev/null
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: npm run build
