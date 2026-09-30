@@ -6,6 +6,10 @@ Unlike the Claude Code / Codex / Copilot adapters (which spawn a process per hoo
 
 > Status: spec complete and validated end-to-end against **opencode 1.15.3**. See [`SPEC.md`](./SPEC.md), [`PLAN.md`](./PLAN.md), and the empirical record in [`HYPOTHESIS_VALIDATION.md`](./HYPOTHESIS_VALIDATION.md) (§10–13).
 
+Returned-output enforcement is additionally verified against **OpenCode 1.18.31**
+using its actual CLI and a keyless loopback provider. The native MCP-error
+limitation below is explicitly excluded from that enforcement claim.
+
 ## How it hooks in
 
 opencode fires plugin hooks around every built-in **and** MCP tool. This adapter uses only non-experimental hooks:
@@ -16,9 +20,9 @@ opencode fires plugin hooks around every built-in **and** MCP tool. This adapter
 | `chat.params` | remember exact-message request model evidence (no extra span) | `{ sessionID, agent, model, message }` |
 | `event` | lifecycle span (Bronze flatten) + flush on `session.idle` | `{ event: { id, type, properties } }`, every event carries `properties.sessionID` |
 | `tool.execute.before` | query guard → **`throw` on DENY** + emit span | input `{ tool, sessionID, callID }`, output `{ args }` (full tool args, mutable) |
-| `tool.execute.after` | tool-result span (incl. exit code) | output `{ title, output, metadata{ output, exit, truncated, … } }` |
+| `tool.execute.after` | query output guard before delivery + original tool-result span | builtin `{ title, output, metadata{ exit, truncated, … }, attachments? }`; raw MCP `{ content, structuredContent?, isError? }` |
 
-> The `permission.ask` plugin hook is **declared but never triggered** in opencode — do not depend on it. Gating is done in `tool.execute.before` only.
+> Do not depend on the declared `permission.ask` plugin hook. Execution gating uses `tool.execute.before`; output delivery gating uses the awaited `tool.execute.after`.
 
 ## Install
 
@@ -55,7 +59,7 @@ PINTA_OPENCODE_GUARD=https://your-relay.example.com/guard
 |---|---|
 | `endpoint` / `PINTA_OPENCODE_ENDPOINT` | Full OTLP/HTTP traces URL. Falls back to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` (+`/v1/traces`). No endpoint → telemetry disabled. |
 | `headers` / `PINTA_OPENCODE_HEADERS` | `key=val,key=val` request headers (auth). Falls back to `OTEL_EXPORTER_OTLP_HEADERS`. |
-| `guard` / `PINTA_OPENCODE_GUARD` | Optional. POST'd on `tool.execute.before`; a `DENY` blocks the tool. No endpoint → governance disabled. |
+| `guard` / `PINTA_OPENCODE_GUARD` | Optional. POST'd on `tool.execute.before` and `tool.execute.after`; DENY blocks execution or withholds returned output, respectively. No endpoint → governance disabled. |
 | `token` / `PINTA_OPENCODE_TOKEN` | Sent as `x-pinta-relay-token` on guard + OTLP. |
 | `PINTA_OPENCODE_GUARD_TIMEOUT_MS` | Guard client timeout (default `100`). Declared to the Pinta Manager as its budget, so raising it also lets the manager wait longer. |
 | `PINTA_OPENCODE_GUARD_DISABLED=1` | Force-disable the guard. |
@@ -75,9 +79,47 @@ body: the OTLP payload itself — { "resourceSpans": [ … one span, opencode.* 
 
 The verdict is then attached to that same span (`pinta.guard.*`) before it is sent, so the span the guard judged is the span the collector stores.
 
-A `DENY` becomes `throw new Error(userMessage ?? reason ?? "guard_deny")`. Verified effect: **only that tool is blocked** (`tool.execute.after` does not fire), the reason shows as `✗ … failed` + `Error: <reason>` to the model/TUI, and the session stays alive. `ALLOW`/`REVIEW` pass through.
+A before-hook `DENY` becomes `throw new Error(userMessage ?? reason ?? "guard_deny")`. Verified effect: **only that tool is blocked** (`tool.execute.after` does not fire), the reason shows as `✗ … failed` + `Error: <reason>` to the model/TUI, and the session stays alive. `ALLOW`/`REVIEW` pass through.
 
-Guard is **fail-open** (no endpoint / `PINTA_GUARD_DISABLED=1` / non-200 / timeout / error → allow), so it never breaks a session. The call is awaited before the tool runs, so a tool call stalls on it for at most the guard timeout (100ms by default).
+Guard is **fail-open** (no endpoint / `PINTA_OPENCODE_GUARD_DISABLED=1` / non-200 / timeout / error → allow), so infrastructure failures do not break a session. Each guard call is awaited for at most the configured timeout (100ms by default).
+
+### Returned-output enforcement
+
+The awaited after hook submits the original redaction-aware `opencode.tool.after`
+span before OpenCode returns the result to the model. Builtin output retains its
+text, exit code and truncation evidence; MCP results retain the full raw result,
+including `content`, `structuredContent` and any `isError` field. The original
+invocation arguments, when provided by the host, remain audit evidence, not new
+operations to evaluate. The guard must recognize
+`opencode.hook=tool.execute.after` and apply returned-content policies without
+rejudging completed input or package operations. The existing Manager envelope
+floor does not establish that output capability.
+
+After evaluation, every non-null verdict carries `pinta.guard.target=tool_output`
+on the same span and IDs. This marker is audit metadata, not an input needed to
+activate output policies. DENY throws the fixed safe message
+`Pinta withheld this tool output because it violated an active policy.`
+It never reflects guard-supplied text back to the model. OpenCode surfaces a tool
+error and can continue its session; the adapter does not undo side effects or
+claim that a successfully executed tool failed. The original masked output and
+native exit/`isError` evidence are retained independently of delivery denial.
+
+Neither before nor after DENY waits for collector IO. With telemetry configured,
+the original annotated payload is retained in a bounded in-memory queue and
+drained on a later `session.idle` flush before the idle-event POST. The shared 900 KiB UTF-8 POST limit still
+applies; oversized payloads and retention errors are diagnosed without delaying
+or suppressing denial. No telemetry endpoint means no retention. Like the
+existing retry buffer, this queue is not durable across process termination.
+
+The host must dispatch the after callback: a tool that throws before returning
+skips it. In OpenCode 1.18.31, **MCP `isError: true` is converted to an exception
+before the after hook**, so this adapter cannot withhold that native error path.
+A directly invoked after-hook test with `isError` is not native error coverage.
+The pinned [MCP conversion](https://github.com/anomalyco/opencode/blob/v1.18.31/packages/opencode/src/mcp/catalog.ts)
+and [tool runner](https://github.com/anomalyco/opencode/blob/v1.18.31/packages/opencode/src/session/tools.ts)
+define this boundary. Returned builtin results, including nonzero shell exit
+codes, and successful raw MCP results use the awaited after hook; undispatched
+host paths are not treated as protected.
 
 ## Span conventions
 

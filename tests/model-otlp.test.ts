@@ -179,11 +179,14 @@ describe("built OpenCode plugin → loopback OTLP", () => {
     }
     for (const payload of received.slice(1)) expect(attrs(payload)["opencode.model"]).toBeUndefined();
     await h.event({ event: { type: "message.updated", properties: { sessionID: "s", info: ["malformed"] } } });
+    const beforeDeny = received.length;
     await expect(h["tool.execute.before"]({
       sessionID: "s", callID: "denied", tool: "bash",
       model: { modelID: "explicit-model", providerID: "provider" },
-    }, { args: { command: "DENYME mysql -psecretpw" } })).rejects.toThrow("test-deny");
-    const denied = received.at(-1)!;
+    }, { args: { command: "mysql -psecretpw DENYME" } })).rejects.toThrow("test-deny");
+    expect(received).toHaveLength(beforeDeny);
+    await h.event({ event: { type: "session.idle", properties: { sessionID: "s" } } });
+    const denied = received.find(payload => span(payload).spanId === span(guarded[0]).spanId)!;
     expect(attrs(denied)).toMatchObject({
       "opencode.model": "explicit-model", "opencode.provider": "provider",
       "opencode.model_source": "reported:tool.model.modelID", "pinta.guard.decision": "deny",
@@ -192,6 +195,6 @@ describe("built OpenCode plugin → loopback OTLP", () => {
     expect(attrs(denied)["opencode.tool_input"]).toContain("[REDACTED:cli_password_short]");
     expect(span(guarded[0]).spanId).toBe(span(denied).spanId);
     expect(attrs(guarded[0])["opencode.model"]).toBe("explicit-model");
-    expect(received).toHaveLength(11);
+    expect(received).toHaveLength(12);
   });
 });

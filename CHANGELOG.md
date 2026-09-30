@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Evaluate the original `tool.execute.after` payload before OpenCode delivers
+  supported builtin and raw MCP output. DENY uses fixed safe feedback, preserves
+  original masked execution evidence/IDs, and attaches the output target only
+  after evaluation. ALLOW, REVIEW and explicit fail-open behavior are unchanged.
+- Return before/after DENY without collector IO. Retain telemetry in a bounded,
+  endpoint-aware memory queue using the existing UTF-8 POST limit; flush it
+  before the next idle-event POST, rather than waiting behind that POST's ACK.
+  The queue is not durable across process termination.
+- Bundle published `@pinta-ai/core` 0.9.1, including its mysql-family-only short
+  password masking fix. The effective guard timeout remains 100ms.
+- Verify the actual OpenCode 1.18.31 CLI with a keyless loopback provider:
+  returned builtin success/nonzero exit and raw MCP success/structured output
+  are gated. MCP `isError: true` and other thrown executions skip the after hook
+  in that host and remain an explicit unsupported error-output boundary.
+- Keep Manager 0.1.11 as the existing envelope floor, without implying it
+  supplies native after-phase projection and output-only policy evaluation.
+
+Refs PTA-584.
+
 ## 0.11.0
 
 - Guard default timeout 50ms -> 100ms. At 50ms a manager answering in its

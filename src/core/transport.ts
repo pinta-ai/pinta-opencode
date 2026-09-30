@@ -5,7 +5,7 @@
 // passed to the constructor, NOT from late process.env reads: we hand the
 // transport a resolveOptions closure that returns the captured config (or null
 // to silently disable when no endpoint was configured).
-import { MemoryTransport } from "@pinta-ai/core";
+import { MAX_POST_BYTES, MemoryRetryQueue, MemoryTransport, type OtlpPayload } from "@pinta-ai/core";
 
 export interface TransportConfig {
   /** Full OTLP/HTTP traces URL. Undefined → telemetry silently disabled. */
@@ -19,11 +19,29 @@ export interface TransportConfig {
  * when no endpoint is configured.
  */
 export class Transport extends MemoryTransport {
-  constructor(config: TransportConfig) {
+  private deferred = new MemoryRetryQueue();
+
+  constructor(private config: TransportConfig) {
     super({
       logPrefix: "pinta-opencode",
       resolveOptions: () =>
         config.endpoint ? { endpoint: config.endpoint, headers: config.headers } : null,
     });
+  }
+
+  /** A decided DENY must return to the host without collector IO. */
+  defer(payload: OtlpPayload): void {
+    if (!this.config.endpoint) return;
+    const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
+    if (bytes > MAX_POST_BYTES) {
+      process.stderr.write(`[pinta-opencode] deferred payload exceeds POST budget (${bytes} bytes); dropped\n`);
+      return;
+    }
+    this.deferred.enqueue(payload);
+  }
+
+  override async flush(): Promise<void> {
+    await super.flush();
+    for (const payload of this.deferred.drain()) await super.send(payload);
   }
 }
