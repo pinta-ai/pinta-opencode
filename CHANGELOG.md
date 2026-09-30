@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.2
+
+- Bundle published `@pinta-ai/core` 0.9.2, including the narrowly scoped
+  `CommandLine` JSON-command masking alias fix. Arbitrary JSON strings and fake
+  executable wrappers are not treated as native command fields.
+- Preserve the existing output gate, original evidence, fail-open behavior and
+  collector-independent DENY. OpenCode 1.18.31 still skips the after hook for
+  MCP `isError: true`; this distinct host gap remains open as PTA-608.
+- Forward-only patch: the published 0.11.1 version, tag and artifact are
+  unchanged. No Manager, backend or catalog change accompanies this release.
+
+Refs PTA-584, PTA-608.
+
 ## 0.11.1
 
 - Evaluate the original `tool.execute.after` payload before OpenCode delivers
