@@ -120,6 +120,9 @@ and [tool runner](https://github.com/anomalyco/opencode/blob/v1.18.31/packages/o
 define this boundary. Returned builtin results, including nonzero shell exit
 codes, and successful raw MCP results use the awaited after hook; undispatched
 host paths are not treated as protected.
+This native MCP-error gap is tracked separately in
+[PTA-608](https://linear.app/pinta-ai/issue/PTA-608); a shared-core masking upgrade
+does not make the missing host callback fire.
 
 ## Span conventions
 
