@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1
 
 - Evaluate the original `tool.execute.after` payload before OpenCode delivers
   supported builtin and raw MCP output. DENY uses fixed safe feedback, preserves
@@ -12,6 +12,8 @@
   The queue is not durable across process termination.
 - Bundle published `@pinta-ai/core` 0.9.1, including its mysql-family-only short
   password masking fix. The effective guard timeout remains 100ms.
+- Isolate private-dependency installation from setup-node's npmjs auth binding.
+  The GitHub token is bound only to GitHub Packages; public publishing uses OIDC.
 - Verify the actual OpenCode 1.18.31 CLI with a keyless loopback provider:
   returned builtin success/nonzero exit and raw MCP success/structured output
   are gated. MCP `isError: true` and other thrown executions skip the after hook
