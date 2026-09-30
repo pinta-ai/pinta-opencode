@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1
 
 - Evaluate the original `tool.execute.after` payload before OpenCode delivers
   supported builtin and raw MCP output. DENY uses fixed safe feedback, preserves
