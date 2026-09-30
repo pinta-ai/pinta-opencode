@@ -17,10 +17,18 @@ export interface OpencodeEvent {
 
 export interface ToolBeforeInput extends ToolModelInput {}
 
+export interface ToolAfterInput extends ToolBeforeInput {
+  args?: unknown;
+}
+
 export interface ToolAfterOutput {
   title?: string;
   output?: unknown;
   metadata?: Record<string, unknown>;
+  attachments?: unknown[];
+  content?: unknown[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
 }
 
 /**
@@ -64,6 +72,8 @@ export class Telemetry {
     const props = record(ev.properties) ?? {};
     const sessionId = eventSessionID(ev.type, props);
     const model = this.models.event(ev.type, props);
+    // A slow idle-event POST must not hold queued denials until after CLI exit.
+    if (ev.type === "session.idle") await this.transport.flush();
     await this.emit(`opencode.event.${ev.type ?? "unknown"}`, sessionId, modelFields({
       hook: "event",
       event_type: ev.type,
@@ -71,7 +81,6 @@ export class Telemetry {
       cwd: process.cwd(),
       ...props,
     }, model));
-    if (ev.type === "session.idle") await this.transport.flush();
   }
 
   /**
@@ -96,16 +105,23 @@ export class Telemetry {
     await this.send(attachGuard(this.toolBeforePayload(input, args), guard));
   }
 
-  /** Tool result span from `tool.execute.after`, incl. exit code / truncation. */
-  async toolAfter(input: ToolBeforeInput, output: ToolAfterOutput): Promise<void> {
+  /** Raw MCP results arrive before OpenCode converts their content to output. */
+  toolAfterPayload(input: ToolAfterInput, output: ToolAfterOutput): OtlpPayload {
     const meta = output.metadata ?? {};
-    await this.emit("opencode.tool.after", input.sessionID, modelFields({
+    return this.build("opencode.tool.after", input.sessionID, modelFields({
       ...toolIdentity("tool.execute.after", input),
+      tool_input: input.args,
       title: output.title,
-      tool_response: output.output,
+      tool_response: output.content !== undefined ? output : output.output,
+      attachments: output.attachments,
       exit: meta.exit,
       truncated: meta.truncated,
     }, this.models.afterTool(input)));
+  }
+
+  /** Tool result span from `tool.execute.after`, incl. exit code / truncation. */
+  async toolAfter(input: ToolAfterInput, output: ToolAfterOutput): Promise<void> {
+    await this.send(this.toolAfterPayload(input, output));
   }
 }
 
