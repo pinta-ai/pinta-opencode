@@ -13,6 +13,22 @@ function attrs(p: ReturnType<typeof buildOtlpPayload>) {
 }
 
 describe("otlp", () => {
+  it.each(["ordinary", "FAKE0NativeOutputCredential123456"])("attributes the returned value, not hidden result metadata: %s", (output) => {
+    const secret = "FAKE0NativeOutputCredential123456";
+    const p = buildOtlpPayload({
+      name: "opencode.tool.after", traceId: ULID, serviceVersion: undefined,
+      fields: {
+        hook: "tool.execute.after", tool_name: "bash",
+        tool_input: { command: "echo ordinary", header: `Authorization: Bearer ${secret}` },
+        tool_response: { output, metadata: { display: secret } },
+      },
+    });
+    const value = attrs(p)["pinta.facts"];
+    if (typeof value !== "string") throw new Error("Missing producer findings");
+    expect(JSON.parse(value).items[0].secrets.origins).toEqual([output === secret ? "toolOutput" : "attributes"]);
+    expect(JSON.stringify(p)).not.toContain(secret);
+  });
+
   it("converts a ULID to a 32-hex traceId", () => {
     expect(ulidToTraceId(ULID)).toMatch(/^[0-9a-f]{32}$/);
   });
