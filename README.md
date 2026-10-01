@@ -26,6 +26,11 @@ opencode fires plugin hooks around every built-in **and** MCP tool. This adapter
 
 ## Install
 
+Staging builds live on `staging/skax-a`, use the `skax` npm tag, and pin
+Core `0.9.3-skax.0`. Returned-content findings exclude completed arguments
+and non-returned result metadata. Use the isolated stage catalog and coordinated
+Manager build; keep `main` and the production catalog separate.
+
 Add to global `~/.config/opencode/opencode.json` (or a project `opencode.json`):
 
 ```jsonc

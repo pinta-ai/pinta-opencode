@@ -1,6 +1,6 @@
 {
   "name": "@pinta-ai/pinta-opencode",
-  "version": "0.11.2",
+  "version": "0.11.3-skax.0",
   "description": "OTLP forwarder + guard for opencode (in-process plugin)",
   "type": "module",
   "main": "dist/plugin.js",
@@ -36,7 +36,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@pinta-ai/core": "^0.9.2",
+    "@pinta-ai/core": "0.9.3-skax.0",
     "@types/node": "^22.0.0",
     "esbuild": "0.24.2",
     "typescript": "^5.7.0",

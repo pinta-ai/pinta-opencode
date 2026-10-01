@@ -68,6 +68,11 @@ const BASH_CONTEXT_KEYS: ReadonlySet<string> = new Set([
 const ATTR_POLICY: AttrPolicy = {
   skipRedactKeys: SKIP_REDACT_KEYS,
   bashContextKeys: BASH_CONTEXT_KEYS,
+  outputForKey: (key, value) => {
+    if (key === "opencode.error" || key === "opencode.error_message") return value;
+    if (!["opencode.tool_response", "opencode.tool_result", "opencode.output"].includes(key)) return undefined;
+    return value && typeof value === "object" && "output" in value && value.output !== undefined ? value.output : value;
+  },
 };
 
 /** Bronze flattening: every field becomes an `opencode.<key>` attribute, losslessly. */
