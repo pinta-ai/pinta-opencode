@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.12.0
+
+- A tool-output DENY now tells the model why. The after-hook error carries the
+  policy's own `userMessage` (or a fixed default notice), the manager's
+  `evaluationId` when it sent one, and a fixed recovery hint: the tool already
+  ran, do not retry it to bypass the block, tell the user, report the
+  evaluation id if it looks like a false positive. The previous one-line
+  `Pinta withheld this tool output because it violated an active policy.` is
+  gone. The session stays alive exactly as before; only the error text changed.
+- Partial masking is wired but off. When the manager marks the DENY as `mask`
+  and sends the detected values (`outputAction` + `redactions`,
+  `@pinta-ai/core` `buildOutputDenial`), the adaptor can deliver the builtin
+  output with just those values replaced by `[REDACTED:<category>]`, prefixed
+  by the notice and hint, instead of throwing. This path is behind
+  `PINTA_OPENCODE_OUTPUT_MASK=1` / `outputMask: true` because it works by
+  mutating `output.output` inside `tool.execute.after`, and this repository has
+  verified only the before-hook `throw` against a live OpenCode
+  (`HYPOTHESIS_VALIDATION.md` H-A1) — not that the host delivers a mutated
+  after-hook output to the model. Until that is measured, `mask` throws the
+  same notice + hint as `withhold`, without the masked text in the error. Raw
+  MCP results (no `output` string) always throw, flag or not.
+- The manager's `redactions` are the secrets themselves: they are read from the
+  loopback response and never copied onto the span, the deferred payload or a
+  log line.
+
+Compatibility:
+
+- `@pinta-ai/core` `^0.9.2` -> `^0.10.0` (`GuardResult.evaluationId` /
+  `outputAction` / `redactions`, `buildOutputDenial`).
+- Pinta Manager < 0.1.16 sends none of the new fields: every output DENY is a
+  withhold whose notice is the policy `userMessage`. Manager 0.1.11 remains the
+  guard-payload floor.
+- Before-hook DENY (`throw new Error(userMessage ?? reason ?? "guard_deny")`)
+  is unchanged.
+
+Refs PTA-695 (parent PTA-580). Open follow-up: verify on a live OpenCode that
+`tool.execute.after` output mutation reaches the model, then flip the default.
+
 ## 0.11.2
 
 - Bundle published `@pinta-ai/core` 0.9.2, including the narrowly scoped

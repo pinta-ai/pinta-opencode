@@ -15,6 +15,12 @@ export interface PintaOptions {
   token?: string;
   /** Guard client timeout in ms (default 100). */
   guardTimeoutMs?: number;
+  /**
+   * Opt-in (PTA-695): on a maskable tool-output DENY, rewrite `output.output`
+   * with the masked text instead of throwing. Off until OpenCode is confirmed
+   * to deliver a mutated after-hook output to the model. See README.
+   */
+  outputMask?: boolean;
 }
 
 export interface ResolvedConfig {
@@ -24,6 +30,8 @@ export interface ResolvedConfig {
   relayToken?: string;
   guardTimeoutMs: number;
   guardDisabled: boolean;
+  /** `PINTA_OPENCODE_OUTPUT_MASK=1` / `outputMask: true` — see `PintaOptions.outputMask`. */
+  outputMask: boolean;
   /** Undefined when nothing could resolve it; the OTLP attribute is omitted. */
   serviceVersion: string | undefined;
 }
@@ -128,6 +136,7 @@ export function resolveConfig(options: PintaOptions = {}): ResolvedConfig {
     relayToken,
     guardTimeoutMs,
     guardDisabled: process.env.PINTA_OPENCODE_GUARD_DISABLED === "1",
+    outputMask: options.outputMask ?? process.env.PINTA_OPENCODE_OUTPUT_MASK === "1",
     serviceVersion: resolveServiceVersion(),
   };
 }
