@@ -1,7 +1,7 @@
 import { resolveConfig, type PintaOptions } from "./config.js";
 import { Transport } from "./core/transport.js";
 import { TraceManager } from "./core/trace.js";
-import { attachGuard, type OtlpPayload } from "@pinta-ai/core";
+import { attachGuard, buildOutputDenial, type OtlpPayload } from "@pinta-ai/core";
 import { evaluateGuard, type GuardResult } from "./core/guard.js";
 import { Telemetry, type OpencodeEvent, type ToolBeforeInput, type ToolAfterInput, type ToolAfterOutput } from "./telemetry.js";
 import type { ChatMessageInput, ChatMessageOutput, ChatParamsInput, ChatParamsOutput } from "./model.js";
@@ -10,7 +10,15 @@ function warn(scope: string, err: unknown): void {
   process.stderr.write(`[pinta-opencode] ${scope}: ${(err as Error)?.message ?? String(err)}\n`);
 }
 
-const OUTPUT_DENIED_MESSAGE = "Pinta withheld this tool output because it violated an active policy.";
+/**
+ * The text a tool-output DENY is built from: the builtin `output` string when
+ * there is one, else the raw (MCP) result serialized. Mirrors what
+ * `telemetry.toolAfterPayload` records as `opencode.tool_response`.
+ */
+function returnedText(output: ToolAfterOutput | undefined): string {
+  if (typeof output?.output === "string") return output.output;
+  return JSON.stringify(output?.output ?? output) ?? "";
+}
 
 /**
  * Wrap a hook body so every telemetry/guard error is swallowed (logged, not
@@ -98,9 +106,24 @@ export const PintaOpencode = async (_input: unknown, options?: PintaOptions) => 
       }
     },
 
+    // ★ output gate (PTA-695): a DENY hands the model the policy's own message
+    // plus a fixed recovery hint. The one replacement channel verified on this
+    // host is the throw (the tool shows as failed, the session continues). A
+    // `mask` DENY is delivered as masked text only behind `outputMask`, and only
+    // through the builtin `output` string — whether OpenCode reads a mutated
+    // after-hook output back is not yet verified, and the masked text must never
+    // ride inside the error (that is the channel the host echoes verbatim).
     "tool.execute.after": async (input: ToolAfterInput, output: ToolAfterOutput) => {
       const guard = await guardAndTrace("tool.execute.after", () => telemetry.toolAfterPayload(input, output));
-      if (guard?.decision === "DENY") throw new Error(OUTPUT_DENIED_MESSAGE);
+      if (guard?.decision !== "DENY") return;
+      const denial = buildOutputDenial({ original: returnedText(output), guard });
+      if (denial.action === "mask" && config.outputMask && typeof output?.output === "string") {
+        const delivered = `${denial.notice}\n\n${denial.guidance}\n\n${denial.text}`;
+        output.output = delivered;
+        if (output.metadata && typeof output.metadata.output === "string") output.metadata.output = delivered;
+        return;
+      }
+      throw new Error(`${denial.notice}\n\n${denial.guidance}`);
     },
   };
 };
