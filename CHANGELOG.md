@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.2-pta1010.1
+
+- Bundle Core `0.11.1-pta1010.1` for bounded Fetch-mode and CLI-option semantics
+  and OpenAI-key token boundaries, including Acorn's MIT notice.
+- Mark returned-secret facts as `toolOutput` instead of completed-input
+  attributes. Keep original masking and value-free match coordinates in
+  deferred telemetry; guard and stored fact representations stay distinct.
+- Preserve output withholding and opt-in masking behavior. This Stage candidate
+  requires explicit compatible catalog approval and does not promote stable.
+
 ## 0.12.1
 
 ### Changed
