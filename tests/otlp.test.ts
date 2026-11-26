@@ -13,6 +13,24 @@ function attrs(p: ReturnType<typeof buildOtlpPayload>) {
 }
 
 describe("otlp", () => {
+  it("separates returned secrets from completed inputs", () => {
+    const inputKey = `sk-${"FAKE0".repeat(9)}input`;
+    const outputKey = `sk-${"FAKE0".repeat(9)}output`;
+    const payload = buildOtlpPayload({
+      name: "opencode.tool.after", traceId: ULID, serviceVersion: undefined,
+      fields: {
+        hook: "tool.execute.after", tool_name: "read",
+        tool_input: { note: inputKey }, tool_response: outputKey,
+      },
+    });
+    expect(JSON.parse(String(attrs(payload)["pinta.facts"])).items).toMatchObject([
+      { secrets: { count: 1, origins: ["attributes"] } },
+      { secrets: { count: 1, origins: ["toolOutput"] } },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain(inputKey);
+    expect(JSON.stringify(payload)).not.toContain(outputKey);
+  });
+
   it("converts a ULID to a 32-hex traceId", () => {
     expect(ulidToTraceId(ULID)).toMatch(/^[0-9a-f]{32}$/);
   });

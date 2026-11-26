@@ -72,7 +72,24 @@ describe("deadline-safe memory retention", () => {
     const stored = collected.flatMap(p => p.resourceSpans.flatMap(r => r.scopeSpans.flatMap(s => s.spans)))
       .find(s => s.spanId === judgedSpan.spanId)!;
     expect(stored.traceId).toBe(judgedSpan.traceId);
-    expect(stored.attributes).toEqual(expect.arrayContaining(judgedSpan.attributes));
+    expect(stored.attributes).toEqual(expect.arrayContaining(
+      judgedSpan.attributes.filter(attribute => attribute.key !== "pinta.facts"),
+    ));
+    const judgedAttrs = Object.fromEntries(judgedSpan.attributes.map(a => [a.key, Object.values(a.value)[0]]));
+    const storedAttrs = Object.fromEntries(stored.attributes.map(a => [a.key, Object.values(a.value)[0]]));
+    const storedFacts = JSON.parse(String(storedAttrs["pinta.facts"]));
+    expect(storedFacts).toMatchObject(JSON.parse(String(judgedAttrs["pinta.facts"])));
+    expect(storedFacts.items).toHaveLength(1);
+    expect(storedFacts.items[0].evidence).toEqual({ ruleId: "cli_password_short" });
+    const original = phase === "before" ? JSON.stringify({ command: text }) : text;
+    const start = original.indexOf("-pfixturepw");
+    expect(JSON.parse(String(storedAttrs["pinta.credential_matches"]))).toEqual({
+      version: 1, coordinateSpace: "original_attribute_utf16", complete: true,
+      items: [{
+        attribute: phase === "before" ? "opencode.tool_input" : "opencode.tool_response",
+        pattern: "cli_password_short", start, end: start + "-pfixturepw".length,
+      }],
+    });
     expect(JSON.stringify(stored)).not.toContain("fixturepw");
   });
 
