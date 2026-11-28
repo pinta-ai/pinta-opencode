@@ -19,8 +19,9 @@
  * specific globals) so it runs unmodified whether the sidecar host is Node or
  * Bun.
  */
-import { opendir, stat } from "node:fs/promises";
+import { opendir, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import path from "node:path";
 
 import { snapshot } from "./snapshot.js";
@@ -32,6 +33,16 @@ import type {
 } from "./types.js";
 
 const WRAPPER_ID = "pinta-opencode";
+
+interface ScanControl {
+  signal?: AbortSignal;
+  visited: number;
+}
+
+function missingPath(error: unknown): boolean {
+  return error instanceof Error && "code" in error &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR");
+}
 
 /**
  * `$OPENCODE_DATA ?? $XDG_DATA_HOME/opencode ?? ~/.local/share/opencode`.
@@ -118,22 +129,31 @@ export async function roots(): Promise<string[]> {
 async function* walkFiles(
   root: string,
   dir: string,
+  control: ScanControl,
 ): AsyncGenerator<{ absPath: string; relPath: string }> {
+  control.signal?.throwIfAborted();
   let entries;
   try {
     entries = await opendir(dir);
-  } catch {
-    // Root doesn't exist yet (opencode never run) or vanished mid-walk.
-    return;
+  } catch (error) {
+    control.signal?.throwIfAborted();
+    if (missingPath(error)) return;
+    throw new Error("OpenCode transcript directory could not be opened", { cause: error });
   }
 
   try {
     for await (const entry of entries) {
+      control.signal?.throwIfAborted();
+      if (++control.visited === 128) {
+        control.visited = 0;
+        await yieldToEventLoop();
+        control.signal?.throwIfAborted();
+      }
       const absPath = path.join(dir, entry.name);
       const relPath = toPosixRelPath(root, absPath);
       if (entry.isDirectory()) {
         if (isExcludedDir(relPath)) continue;
-        yield* walkFiles(root, absPath);
+        yield* walkFiles(root, absPath, control);
       } else if (entry.isFile()) {
         if (isExcluded(relPath)) continue;
         yield { absPath, relPath };
@@ -141,24 +161,30 @@ async function* walkFiles(
       // Symlinks / special entries are skipped — opencode does not produce
       // them here, and following them risks escaping the root or cycles.
     }
-  } catch {
-    // Directory removed while iterating — treat as end of this subtree.
-    return;
+  } catch (error) {
+    control.signal?.throwIfAborted();
+    if (missingPath(error)) return;
+    throw new Error("OpenCode transcript directory scan failed", { cause: error });
   }
 }
 
-async function* scan(opts: { since?: Date }): AsyncIterable<TranscriptFile> {
+async function* scan(opts: { since?: Date; signal?: AbortSignal }): AsyncIterable<TranscriptFile> {
+  opts.signal?.throwIfAborted();
   const [root] = await roots();
   const sinceMs = opts.since?.getTime();
+  const control: ScanControl = { signal: opts.signal, visited: 0 };
 
-  for await (const { absPath, relPath } of walkFiles(root, root)) {
+  for await (const { absPath, relPath } of walkFiles(root, root, control)) {
+    opts.signal?.throwIfAborted();
     let st;
     try {
-      st = await stat(absPath);
-    } catch {
-      // Removed between listing and stat (TOCTOU) — skip (plan §4.1 "삭제됨: 스킵").
-      continue;
+      st = await lstat(absPath);
+    } catch (error) {
+      if (missingPath(error)) continue;
+      throw new Error("OpenCode transcript file could not be inspected", { cause: error });
     }
+    opts.signal?.throwIfAborted();
+    if (!st.isFile()) continue;
 
     if (sinceMs !== undefined && st.mtime.getTime() <= sinceMs) {
       continue;
