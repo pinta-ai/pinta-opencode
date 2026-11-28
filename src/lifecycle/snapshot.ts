@@ -59,7 +59,7 @@ export interface SnapshotOptions {
   /** max fallback copy attempts when the file keeps moving. Default 3. */
   maxRetries?: number;
   /**
-   * Overall wall-clock cap (ms) for the quiesce-copy fallback. The mtime-
+   * Wall-clock cap (ms) for each CLI backup or quiesce-copy fallback. The mtime-
    * stability wait can otherwise spin forever when the source is written on a
    * cadence shorter than `stableMs` (opencode flushes `opencode.db` ~every 2s),
    * hanging `snapshot()` and stalling the sidecar scan pipeline. On exceed we
@@ -78,7 +78,7 @@ let sqlite3Probe: Promise<string | null> | undefined;
 /** Detect a usable `sqlite3` on PATH, once. Returns the binary name or null. */
 export function detectSqlite3(): Promise<string | null> {
   if (sqlite3Probe === undefined) {
-    sqlite3Probe = execFileAsync("sqlite3", ["-version"])
+    sqlite3Probe = execFileAsync("sqlite3", ["-version"], { timeout: 5000, killSignal: "SIGKILL", maxBuffer: 4096 })
       .then(() => "sqlite3" as const)
       .catch(() => null)
       .then((result) => {
@@ -113,14 +113,18 @@ async function makeSnapshotDir(base: string): Promise<string> {
  * The `.timeout` pragma lets `.backup` wait out a busy writer instead of
  * failing immediately.
  */
-async function backupViaCli(sqlite3Path: string, dbPath: string, outPath: string): Promise<void> {
+async function backupViaCli(sqlite3Path: string, dbPath: string, outPath: string, deadlineMs: number): Promise<void> {
   // `-cmd ".timeout 5000"` runs before the db is read so `.backup` waits out a
   // busy writer instead of failing on a lock; the trailing arg then runs the
   // online-backup snapshot and exits. (Dot-commands must each be their own
   // argv element — a single `\n`-joined arg is silently ignored by the CLI.)
   // Quote the out path to tolerate spaces; `''` escapes an embedded quote.
   const backupCmd = `.backup '${outPath.replace(/'/g, "''")}'`;
-  await execFileAsync(sqlite3Path, ["-cmd", ".timeout 5000", dbPath, backupCmd]);
+  await execFileAsync(sqlite3Path, ["-cmd", ".timeout 5000", dbPath, backupCmd], {
+    timeout: Math.max(1, deadlineMs),
+    killSignal: "SIGKILL",
+    maxBuffer: 64 * 1024,
+  });
 }
 
 /**
@@ -217,9 +221,15 @@ export async function snapshot(file: TranscriptFile, opts: SnapshotOptions = {})
     if (sqlite3Path) {
       const outPath = path.join(outDir, `${path.basename(file.absPath)}.snapshot`);
       try {
-        await backupViaCli(sqlite3Path, file.absPath, outPath);
+        await backupViaCli(sqlite3Path, file.absPath, outPath, deadlineMs);
         return outPath;
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && (
+          ("killed" in error && error.killed === true) ||
+          ("code" in error && error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER")
+        )) {
+          throw error;
+        }
         // CLI backup failed (locked out, odd build) — fall through to the
         // quiesce-copy fallback rather than dropping the file entirely.
       }

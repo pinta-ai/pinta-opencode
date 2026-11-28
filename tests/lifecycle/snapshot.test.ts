@@ -117,6 +117,29 @@ describe("quiesce-copy fallback (sqlite3Path: null)", () => {
 });
 
 describe("sqlite3 CLI .backup path", () => {
+  it.skipIf(process.platform === "win32")("terminates a wedged backup instead of returning a fallback success", async () => {
+    const cli = path.join(workDir, "wedged-sqlite3");
+    fs.writeFileSync(cli, `#!${process.execPath}\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    const src = path.join(workDir, "source.db");
+    fs.writeFileSync(src, "unchanged source bytes");
+    await expect(snapshot(dbFile(src), {
+      sqlite3Path: cli, tmpDir, deadlineMs: 100, stableMs: 1,
+    })).rejects.toMatchObject({ killed: true });
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+    expect(fs.readFileSync(src, "utf8")).toBe("unchanged source bytes");
+  }, 5000);
+
+  it.skipIf(process.platform === "win32")("limits child output and does not fall back after a buffer overflow", async () => {
+    const cli = path.join(workDir, "noisy-sqlite3");
+    fs.writeFileSync(cli, `#!${process.execPath}\nprocess.stderr.write("x".repeat(256 * 1024)); process.exitCode = 1;\n`, { mode: 0o755 });
+    const src = path.join(workDir, "source.db");
+    fs.writeFileSync(src, "unchanged source bytes");
+    await expect(snapshot(dbFile(src), {
+      sqlite3Path: cli, tmpDir, deadlineMs: 5000, stableMs: 1,
+    })).rejects.toMatchObject({ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" });
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+
   it.skipIf(!hasSqlite3())(
     "produces a single consolidated db (no -wal) that opens and queries",
     async () => {
